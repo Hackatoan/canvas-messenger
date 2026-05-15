@@ -882,5 +882,6 @@ class CanvasMessenger {
     }
 }
 
-// Export for use in different contexts
-if (typeof module !== 'undefined') module.exports = { CanvasMessenger };
+// Expose as a window global so content.js can reach it regardless of
+// how Firefox wraps the content-script module environment.
+window.CanvasMessenger = CanvasMessenger;

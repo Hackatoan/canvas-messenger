@@ -1,28 +1,36 @@
 /* Injected into all pages — only activates on the configured Canvas domain */
 (async () => {
-    // ── Auto-detect Canvas from window.ENV ────────────────────────────────
-    if (window.ENV && window.ENV.current_user) {
-        const user = window.ENV.current_user;
-        const stored = await new Promise(r => chrome.storage.local.get(['canvasUrl'], r));
-        if (!stored.canvasUrl) {
-            chrome.storage.local.set({
-                canvasUrl: location.origin,
+    // ── Canvas detection ──────────────────────────────────────────────────
+    // Canvas sets window.ENV on every authenticated page; current_user_id is
+    // more reliably present than current_user across all page types.
+    const env = window.ENV || {};
+    const isCanvas = !!(env.current_user || env.current_user_id || env.RAILS_ENVIRONMENT);
+
+    const stored = await new Promise(r => chrome.storage.local.get(['canvasUrl', 'apiToken'], r));
+
+    if (isCanvas && !stored.canvasUrl) {
+        const user = env.current_user || {};
+        await new Promise(r => chrome.storage.local.set({
+            canvasUrl: location.origin,
+            ...(user.id ? {
                 currentUser: {
                     id: user.id,
-                    name: user.display_name || user.name,
+                    name: user.display_name || user.name || '',
                     login_id: user.email || user.login_id || '',
                 },
-            });
-        }
+            } : {}),
+        }, r));
     }
 
-    const settings = await new Promise(r => chrome.storage.local.get(['canvasUrl'], r));
-    const isCanvas  = !!(window.ENV && window.ENV.current_user);
-    const canvasUrl = settings.canvasUrl || (isCanvas ? location.origin : null);
+    // Proceed if this is a Canvas page OR if the user has already pointed the
+    // extension at this domain via Settings.
+    const canvasUrl = stored.canvasUrl || (isCanvas ? location.origin : null);
     if (!canvasUrl) return;
 
-    const canvasHost = new URL(canvasUrl).hostname;
-    if (location.hostname !== canvasHost) return;
+    try {
+        const canvasHost = new URL(canvasUrl).hostname;
+        if (location.hostname !== canvasHost) return;
+    } catch { return; }
 
     // Already injected (e.g. SPA navigation)
     if (document.getElementById('cm-host')) return;
@@ -140,7 +148,15 @@
 
     // CanvasMessenger is defined by styles/messenger.js which runs as a
     // content script before this file (see manifest content_scripts order).
-    new CanvasMessenger(appRoot, { popup: false }); // eslint-disable-line no-undef
+    try {
+        new window.CanvasMessenger(appRoot, { popup: false });
+    } catch (err) {
+        appRoot.innerHTML = `<div style="padding:24px;color:#ed4245;font-family:sans-serif;font-size:13px">
+            Canvas Messenger failed to load: ${err.message}<br>
+            <small>Check the browser console for details.</small>
+        </div>`;
+        console.error('[Canvas Messenger]', err);
+    }
 
     // ── Toggle logic ──────────────────────────────────────────────────────
     let isOpen = false;
