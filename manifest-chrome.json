@@ -21,7 +21,6 @@
     }
   ],
   "action": {
-    "default_popup": "popup/popup.html",
     "default_title": "Canvas Messenger"
   },
   "options_ui": {

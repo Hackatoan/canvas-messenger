@@ -173,5 +173,16 @@ async function handleMessage(msg) {
     }
 }
 
+// ── Extension icon click → toggle sidebar ─────────────────────────────────────
+
+chrome.action.onClicked.addListener(tab => {
+    chrome.tabs.sendMessage(tab.id, { action: 'toggleSidebar' }, () => {
+        // If content script didn't respond (non-Canvas page), open options instead
+        if (chrome.runtime.lastError) {
+            chrome.runtime.openOptionsPage();
+        }
+    });
+});
+
 // initial badge on load
 updateBadge();
