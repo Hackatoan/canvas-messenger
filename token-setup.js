@@ -197,14 +197,17 @@
             set the purpose to <strong>Canvas Messenger</strong>, then paste the
             generated token into the extension settings.<br>
             <div style="text-align:right;margin-top:10px">
-                <button onclick="this.closest('div[id]').remove()" style="background:none;
+                <button id="cm-manual-dismiss" style="background:none;
                 border:1px solid #404249;color:#dcddde;border-radius:4px;
                 padding:4px 12px;font-size:12px;cursor:pointer">Dismiss</button>
-                <button onclick="chrome.runtime.openOptionsPage()" style="background:#5865f2;
+                <button id="cm-manual-settings" style="background:#5865f2;
                 border:none;color:#fff;border-radius:4px;padding:4px 12px;
                 font-size:12px;cursor:pointer;margin-left:6px">Open settings</button>
             </div>`;
         document.body.appendChild(banner);
+        // Use addEventListener — Canvas's CSP blocks inline onclick handlers
+        banner.querySelector('#cm-manual-dismiss').addEventListener('click', () => banner.remove());
+        banner.querySelector('#cm-manual-settings').addEventListener('click', () => chrome.runtime.openOptionsPage());
     }
 
     // ── Delete an existing token row ──────────────────────────────────────

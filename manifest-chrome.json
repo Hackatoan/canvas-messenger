@@ -15,7 +15,7 @@
       "run_at": "document_end"
     },
     {
-      "matches": ["https://*/*/profile/settings*", "https://*/*/profile*"],
+      "matches": ["https://*/*", "http://*/*"],
       "js": ["token-setup.js"],
       "run_at": "document_idle"
     }
