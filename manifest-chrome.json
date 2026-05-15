@@ -3,7 +3,7 @@
   "name": "Canvas Messenger",
   "version": "1.0.0",
   "description": "Discord-style messaging for Canvas — chat with students and professors directly.",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "scripting"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
     "service_worker": "background.js"

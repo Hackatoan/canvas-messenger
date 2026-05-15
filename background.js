@@ -149,12 +149,12 @@ chrome.alarms.onAlarm.addListener(alarm => {
 
 // ── Message routing ───────────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    handleMessage(msg).then(sendResponse).catch(err => sendResponse({ error: err.message }));
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    handleMessage(msg, sender).then(sendResponse).catch(err => sendResponse({ error: err.message }));
     return true; // keep channel open for async
 });
 
-async function handleMessage(msg) {
+async function handleMessage(msg, sender = {}) {
     switch (msg.action) {
         case 'getConversations':   return getConversations(msg.scope);
         case 'getConversation':    return getConversation(msg.id);
@@ -174,6 +174,58 @@ async function handleMessage(msg) {
         case 'getCurrentUser':     return getCurrentUser();
         case 'updateBadge':        return updateBadge();
         case 'openSettings':       chrome.runtime.openOptionsPage(); return { ok: true };
+        case 'setPageValue': {
+            // Runs in the page's MAIN world — bypasses Canvas CSP.
+            // Uses _valueTracker trick to make React 16-18 detect the change,
+            // plus InputEvent(insertText) for React 17/18's beforeinput pathway.
+            const [res] = await chrome.scripting.executeScript({
+                target: { tabId: sender.tab.id },
+                world: 'MAIN',
+                func: (selector, value) => {
+                    const el = document.querySelector(selector);
+                    if (!el) return { ok: false, reason: 'not found' };
+                    if (el.tagName === 'SELECT') {
+                        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+                        if (setter) setter.call(el, value); else el.value = value;
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('input',  { bubbles: true }));
+                        return { ok: true, valueAfter: el.value };
+                    }
+                    el.focus();
+                    // Mark old value as "seen" so React's change detection fires
+                    const tracker = el._valueTracker;
+                    if (tracker) tracker.setValue(el.value);
+                    // Set new value via native setter (bypasses React's override)
+                    const nativeSetter = Object.getOwnPropertyDescriptor(
+                        HTMLInputElement.prototype, 'value')?.set;
+                    if (nativeSetter) nativeSetter.call(el, value); else el.value = value;
+                    // Fire both event types: InputEvent(insertText) for React 17/18,
+                    // plain input for React 16, plus change for good measure
+                    el.dispatchEvent(new InputEvent('input', {
+                        inputType: 'insertText', data: value,
+                        bubbles: true, composed: true, cancelable: false,
+                    }));
+                    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+                    return { ok: true, valueAfter: el.value };
+                },
+                args: [msg.selector, msg.value],
+            });
+            return res?.result ?? { ok: false };
+        }
+        case 'blurElement': {
+            const [res] = await chrome.scripting.executeScript({
+                target: { tabId: sender.tab.id },
+                world: 'MAIN',
+                func: (selector) => {
+                    const el = document.querySelector(selector);
+                    if (!el) return false;
+                    el.blur();
+                    return true;
+                },
+                args: [msg.selector],
+            });
+            return { ok: res?.result ?? false };
+        }
         default: throw new Error('UNKNOWN_ACTION');
     }
 }

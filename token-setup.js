@@ -261,6 +261,9 @@
 
         // Fallback: open Canvas dialog + fill fields via page-context injection
         showOverlay('Opening token dialog…');
+        // Dismiss Canvas product tour overlay if present (it blocks clicks)
+        const tour = document.getElementById('___reactour');
+        if (tour) { tour.style.display = 'none'; tour.style.pointerEvents = 'none'; }
         link.click();
 
         const purposeInput = await waitFor(() => {
@@ -279,71 +282,97 @@
 
         updateOverlay('Filling form…');
 
-        // Firefox content scripts run in an isolated world whose HTMLInputElement
-        // prototype is separate from the page's React-wrapped prototype.
-        // Inject a tiny page-context script to set values so React sees the change.
+        // Canvas's CSP blocks inline <script> injection. Route through the background
+        // service worker which uses chrome.scripting.executeScript({ world:'MAIN' })
+        // — a privileged operation that is exempt from page CSP.
+        async function pageSetValue(selector, value) {
+            return chrome.runtime.sendMessage({ action: 'setPageValue', selector, value });
+        }
+
         const expDate = new Date(Date.now() + 119 * 864e5);
         const expMo   = String(expDate.getMonth() + 1).padStart(2, '0');
         const expDay  = String(expDate.getDate()).padStart(2, '0');
         const expStr  = `${expMo}/${expDay}/${expDate.getFullYear()}`;
 
-        function pageSetValue(selector, value) {
-            const s = document.createElement('script');
-            s.textContent = `(function(){
-                var el = document.querySelector(${JSON.stringify(selector)});
-                if (!el) return;
-                var setter = Object.getOwnPropertyDescriptor(
-                    el.tagName === 'SELECT'
-                        ? HTMLSelectElement.prototype
-                        : HTMLInputElement.prototype,
-                    'value'
-                )?.set;
-                if (setter) setter.call(el, ${JSON.stringify(value)});
-                else el.value = ${JSON.stringify(value)};
-                el.dispatchEvent(new Event('input',  {bubbles:true}));
-                el.dispatchEvent(new Event('change', {bubbles:true}));
-            })();`;
-            (document.head || document.documentElement).appendChild(s);
-            s.remove();
-        }
-
         // Set purpose via page context
-        pageSetValue(
+        await pageSetValue(
             '#access_token_purpose, input[name="purpose"], input[id*="purpose" i]',
             'Canvas Messenger'
         );
 
-        // Wait for date input to be present then fill it
+        // Wait for date input — try explicit name/id/aria first, then fall back
+        // to InstUI's generated IDs (Selectable___N) or positional (2nd dialog input)
         const expInput = await waitFor(() => {
-            const el = document.querySelector(
+            // Explicit selectors (older Canvas / non-InstUI)
+            let el = document.querySelector(
                 'input[name="expires_at"], input[id*="expir" i], ' +
-                'input[placeholder*="expir" i], input[aria-label*="expir" i]'
+                'input[placeholder*="expir" i], input[aria-label*="expir" i], ' +
+                'input[placeholder*="pick a date" i], input[aria-label*="date" i]'
             );
-            return (el && el.offsetParent !== null) ? el : null;
+            if (el && el.offsetParent !== null) return el;
+
+            // InstUI Selectable component generates ids like "Selectable___N"
+            el = document.querySelector('[role="dialog"] input[id^="Selectable___"]');
+            if (el && el.offsetParent !== null) return el;
+
+            // Positional: second text-type input in the dialog (purpose is first)
+            const dialogInputs = [...document.querySelectorAll(
+                '[role="dialog"] input[type="text"], .ReactModal__Content input[type="text"]'
+            )].filter(i => i.offsetParent !== null);
+            if (dialogInputs.length > 1) {
+                const purposeIdx = dialogInputs.findIndex(i => i.name === 'purpose' || /purpose/i.test(i.id));
+                const dateIdx = purposeIdx >= 0 ? purposeIdx + 1 : 1;
+                if (dialogInputs[dateIdx]) return dialogInputs[dateIdx];
+            }
+            return null;
         }, 3000);
 
+        console.log('[CM token-setup] expInput:', expInput
+            ? `id=${expInput.id} name=${expInput.name}` : 'not found');
+
         if (expInput) {
-            // Build selector that uniquely identifies this element
             const id = expInput.id ? `#${CSS.escape(expInput.id)}` :
                        expInput.name ? `input[name="${CSS.escape(expInput.name)}"]` :
-                       'input[id*="expir" i]';
-            pageSetValue(id, expStr);
-            await new Promise(r => setTimeout(r, 150));
-            // Confirm typed date by pressing Tab (closes InstUI calendar)
-            expInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true }));
+                       'input[type="text"]';
+            await pageSetValue(id, expStr);
+            // Wait for React's re-render cycle to propagate the state change
+            // before blurring (otherwise InstUI resets the field on blur)
+            await new Promise(r => setTimeout(r, 800));
+            console.log('[CM token-setup] date DOM value after pageSetValue:', expInput.value);
+            // Blur via MAIN world so InstUI confirms the parsed date (not content-script blur)
+            await chrome.runtime.sendMessage({ action: 'blurElement', selector: id });
+            await new Promise(r => setTimeout(r, 300));
         }
 
         // Fill time select — last option = latest (e.g. 11:59pm)
         await new Promise(r => setTimeout(r, 200));
-        const timeSelect = [...document.querySelectorAll('select')].find(s =>
-            /expir|time/i.test((s.name || '') + (s.id || '') + (s.getAttribute('aria-label') || ''))
-        );
+        // Canvas uses either a real <select> or an InstUI Select (id^="Select___")
+        const timeSelect = [...document.querySelectorAll('select')].find(s => {
+            const key = (s.name || '') + (s.id || '') + (s.getAttribute('aria-label') || '') +
+                        (s.getAttribute('aria-labelledby') || '');
+            return /expir|time/i.test(key) && s.options.length > 1;
+        });
         if (timeSelect?.options?.length) {
-            pageSetValue(
+            const lastVal = timeSelect.options[timeSelect.options.length - 1].value;
+            await pageSetValue(
                 timeSelect.id ? `#${CSS.escape(timeSelect.id)}` :
-                `select[name="${CSS.escape(timeSelect.name || '')}"]`,
-                timeSelect.options[timeSelect.options.length - 1].value
+                timeSelect.name ? `select[name="${CSS.escape(timeSelect.name)}"]` :
+                `select[aria-label="${CSS.escape(timeSelect.getAttribute('aria-label') || '')}"]`,
+                lastVal
             );
+        } else {
+            // InstUI Select renders a hidden <select> — find the text input (id^="Select___")
+            // and set it to the last available option text instead
+            const dialogSelects = [...document.querySelectorAll('select')].filter(
+                s => s.offsetParent !== null || s.closest('[role="dialog"]')
+            );
+            const anySelect = dialogSelects.find(s => s.options.length > 1);
+            if (anySelect) {
+                const lastVal = anySelect.options[anySelect.options.length - 1].value;
+                const sel = anySelect.id ? `#${CSS.escape(anySelect.id)}` :
+                    anySelect.name ? `select[name="${CSS.escape(anySelect.name)}"]` : null;
+                if (sel) await pageSetValue(sel, lastVal);
+            }
         }
 
         await new Promise(r => setTimeout(r, 300));
@@ -362,10 +391,23 @@
             showOverlay('Could not find the Generate button — please click it manually.', true);
             return;
         }
+        console.log('[CM token-setup] Submit btn found:', submitBtn.tagName,
+            submitBtn.type, JSON.stringify(submitBtn.textContent.trim().slice(0, 40)));
         submitBtn.click();
 
-        const token = await waitForToken(8000);
+        // Brief pause then log dialog state to check for validation errors
+        await new Promise(r => setTimeout(r, 1500));
+        const dialogState = [...document.querySelectorAll(
+            '[role="dialog"], .ReactModal__Content'
+        )].map(d => d.textContent.replace(/\s+/g, ' ').trim().slice(0, 500));
+        console.log('[CM token-setup] Dialog state after submit:', JSON.stringify(dialogState));
+
+        const token = await waitForToken(10000);
         if (!token) {
+            const dialogs = [...document.querySelectorAll(
+                '[role="dialog"], dialog, .ui-dialog, .ReactModal__Content, .modal-content'
+            )].map(d => d.textContent.replace(/\s+/g, ' ').trim().slice(0, 400));
+            console.warn('[CM token-setup] Could not extract token. Visible dialogs:', JSON.stringify(dialogs));
             showOverlay('Could not capture the token — please copy it and paste into extension settings.', true);
             return;
         }
@@ -399,62 +441,67 @@
 
             const base    = canvasBase();
             const apiBase = location.origin + base;
-            const url     = `${apiBase}/api/v1/users/self/access_tokens`;
-            console.log('[CM token-setup] POST →', url);
 
             await deleteExistingTokensViaAPI(csrf, apiBase);
 
             const expires = new Date(Date.now() + 119 * 864e5).toISOString();
 
-            // Attempt 1: JSON body
-            let resp = await fetch(url, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Content-Type':     'application/json',
-                    'Accept':           'application/json',
-                    'X-CSRF-Token':     csrf,
-                    'X-Requested-With': 'XMLHttpRequest',
+            // Try multiple combinations of endpoint + body format — different Canvas
+            // versions use different paths and accept different content types.
+            const attempts = [
+                // /tokens endpoint with JSON (modern Canvas React UI uses this)
+                {
+                    path: `${apiBase}/api/v1/users/self/tokens`,
+                    ct:   'application/json',
+                    body: JSON.stringify({ access_token: { purpose: 'Canvas Messenger', expires_at: expires } }),
                 },
-                body: JSON.stringify({
-                    access_token: { purpose: 'Canvas Messenger', expires_at: expires },
-                }),
-            });
-            console.log('[CM token-setup] attempt 1 status:', resp.status);
+                // /tokens endpoint with form-encoded (older canvas-lms controller)
+                {
+                    path: `${apiBase}/api/v1/users/self/tokens`,
+                    ct:   'application/x-www-form-urlencoded',
+                    body: new URLSearchParams({
+                        'access_token[purpose]':    'Canvas Messenger',
+                        'access_token[expires_at]': expires,
+                        authenticity_token:          csrf,
+                    }).toString(),
+                },
+                // /access_tokens endpoint with JSON (newer Canvas API)
+                {
+                    path: `${apiBase}/api/v1/users/self/access_tokens`,
+                    ct:   'application/json',
+                    body: JSON.stringify({ access_token: { purpose: 'Canvas Messenger', expires_at: expires } }),
+                },
+            ];
 
-            // Attempt 2: form-encoded
-            if (!resp.ok) {
-                updateOverlay(`API attempt 1 failed (${resp.status}) — retrying…`);
-                resp = await fetch(url, {
+            for (const { path, ct, body } of attempts) {
+                console.log('[CM token-setup] POST →', path, ct.split('/')[1]);
+                const resp = await fetch(path, {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept':       'application/json',
-                        'X-CSRF-Token': csrf,
+                        'Content-Type':     ct,
+                        'Accept':           'application/json',
+                        'X-CSRF-Token':     csrf,
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
-                    body: new URLSearchParams({
-                        authenticity_token:        csrf,
-                        'access_token[purpose]':    'Canvas Messenger',
-                        'access_token[expires_at]': expires,
-                    }),
+                    body,
                 });
-                console.log('[CM token-setup] attempt 2 status:', resp.status);
+                console.log('[CM token-setup] status:', resp.status);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    console.log('[CM token-setup] API success. Keys:', Object.keys(data));
+                    return data.token          ||
+                           data.visible_token  ||
+                           data.full_token     ||
+                           data.access_token?.token || null;
+                }
+                const errBody = await resp.text().catch(() => '');
+                console.log('[CM token-setup] error body:', errBody.slice(0, 200));
+                updateOverlay(`API attempt failed (${resp.status}) — trying next…`);
             }
 
-            if (!resp.ok) {
-                const body = await resp.text().catch(() => '');
-                console.warn('[CM token-setup] API failed. Body:', body.slice(0, 300));
-                updateOverlay(`API failed (${resp.status}) — trying form…`);
-                return null;
-            }
-
-            const data = await resp.json();
-            console.log('[CM token-setup] API success. Response keys:', Object.keys(data));
-            return data.token          ||
-                   data.visible_token  ||
-                   data.full_token     ||
-                   data.access_token?.token || null;
+            updateOverlay('API failed — trying form…');
+            return null;
         } catch (e) {
             console.error('[CM token-setup] API exception:', e);
             updateOverlay(`API error — trying form… (${e.message})`);
@@ -465,20 +512,34 @@
     async function deleteExistingTokensViaAPI(csrf, apiBase) {
         try {
             apiBase = apiBase || (location.origin + canvasBase());
-            const resp = await fetch(`${apiBase}/api/v1/users/self/access_tokens?per_page=50`, {
-                credentials: 'same-origin',
-                headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf },
-            });
-            if (!resp.ok) return;
-            const tokens = await resp.json();
-            const userId = window.ENV?.current_user_id || 'self';
-            for (const t of tokens) {
-                if (!/canvas\s*messenger/i.test(t.purpose || '')) continue;
-                await fetch(`${apiBase}/api/v1/users/${userId}/access_tokens/${t.id}`, {
-                    method: 'DELETE',
+            // Try both endpoint names
+            for (const path of [
+                `${apiBase}/api/v1/users/self/tokens?per_page=50`,
+                `${apiBase}/api/v1/users/self/access_tokens?per_page=50`,
+            ]) {
+                const resp = await fetch(path, {
                     credentials: 'same-origin',
-                    headers: { 'X-CSRF-Token': csrf },
+                    headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf },
                 });
+                if (!resp.ok) continue;
+                const tokens = await resp.json();
+                if (!Array.isArray(tokens)) continue;
+                const userId = window.ENV?.current_user_id || 'self';
+                for (const t of tokens) {
+                    if (!/canvas\s*messenger/i.test(t.purpose || '')) continue;
+                    // DELETE endpoint also varies by instance
+                    for (const delPath of [
+                        `${apiBase}/api/v1/users/${userId}/tokens/${t.id}`,
+                        `${apiBase}/api/v1/users/${userId}/access_tokens/${t.id}`,
+                    ]) {
+                        const d = await fetch(delPath, {
+                            method: 'DELETE', credentials: 'same-origin',
+                            headers: { 'X-CSRF-Token': csrf },
+                        });
+                        if (d.ok) break;
+                    }
+                }
+                break; // don't try second list endpoint if first worked
             }
         } catch { /* best-effort */ }
     }
