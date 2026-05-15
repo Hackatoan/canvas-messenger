@@ -1,0 +1,4 @@
+dist/
+*.zip
+manifest-firefox.json
+*.sh.bak

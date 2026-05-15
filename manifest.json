@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Canvas Messenger",
+  "version": "1.0.0",
+  "description": "Discord-style messaging for Canvas — chat with students and professors directly.",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    },
+    {
+      "matches": ["https://*/*/profile/settings*", "https://*/*/profile*"],
+      "js": ["token-setup.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Canvas Messenger"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "canvas-messenger@hackatoa",
+      "strict_min_version": "109.0"
+    }
+  }
+}

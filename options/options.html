@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Canvas Messenger — Settings</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #313338;
+    color: #dcddde;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 48px 24px;
+  }
+  .card {
+    background: #2b2d31;
+    border-radius: 8px;
+    padding: 32px;
+    width: 100%;
+    max-width: 480px;
+  }
+  .logo {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #87898c;
+    margin-bottom: 28px;
+  }
+  .field {
+    margin-bottom: 20px;
+  }
+  label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #b5bac1;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .field-hint {
+    font-size: 12px;
+    color: #87898c;
+    margin-top: 5px;
+    line-height: 1.5;
+  }
+  .field-hint a {
+    color: #5865f2;
+    text-decoration: none;
+  }
+  .field-hint a:hover { text-decoration: underline; }
+  input {
+    width: 100%;
+    background: #1e1f22;
+    border: 1px solid #1e1f22;
+    border-radius: 4px;
+    color: #dcddde;
+    font-size: 14px;
+    font-family: inherit;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus { border-color: #5865f2; }
+  input.error { border-color: #ed4245; }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .btn-primary {
+    background: #5865f2;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-family: inherit;
+  }
+  .btn-primary:hover { background: #4752c4; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary {
+    background: #383a40;
+    color: #dcddde;
+    border: none;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.1s;
+  }
+  .btn-secondary:hover { background: #404249; }
+  .status {
+    margin-top: 16px;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: none;
+  }
+  .status.success { background: rgba(87,242,135,0.15); border: 1px solid rgba(87,242,135,0.3); color: #57f287; display: block; }
+  .status.error   { background: rgba(237,66,69,0.15);  border: 1px solid rgba(237,66,69,0.3);  color: #ed4245; display: block; }
+  .divider { border: none; border-top: 1px solid #1e1f22; margin: 24px 0; }
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #1e1f22;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }
+  .user-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: #5865f2;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .user-name { font-size: 14px; font-weight: 600; color: #f2f3f5; }
+  .user-sub  { font-size: 12px; color: #87898c; }
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">📚</div>
+    <h1>Canvas Messenger</h1>
+    <p class="subtitle">Connect your Canvas account to start messaging.</p>
+
+    <div id="user-info" style="display:none" class="user-info">
+        <div class="user-avatar" id="user-avatar"></div>
+        <div>
+            <div class="user-name" id="user-name"></div>
+            <div class="user-sub">Connected to Canvas</div>
+        </div>
+    </div>
+
+    <div class="field">
+        <label>Canvas URL</label>
+        <input type="url" id="canvas-url" placeholder="https://yourschool.instructure.com" />
+        <p class="field-hint">Your school's Canvas address (check your browser's address bar on Canvas).</p>
+    </div>
+
+    <div class="field">
+        <label>API Token</label>
+        <input type="password" id="api-token" placeholder="Paste your Canvas API token…" />
+        <p class="field-hint">
+            Generate at: <strong>Canvas → Account → Settings → New Access Token</strong><br>
+            This is stored locally on your device only.
+        </p>
+    </div>
+
+    <div class="btn-row">
+        <button class="btn-primary" id="save-btn">Save &amp; Connect</button>
+        <button class="btn-secondary" id="test-btn">Test Connection</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <hr class="divider">
+
+    <div style="font-size:12px;color:#87898c;line-height:1.6">
+        <strong style="color:#b5bac1">Privacy notice:</strong> Your API token is stored locally in your browser and never leaves your device. All requests go directly to your school's Canvas instance.
+    </div>
+</div>
+<script src="options.js"></script>
+</body>
+</html>
