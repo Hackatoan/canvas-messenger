@@ -138,7 +138,7 @@ class CanvasMessenger {
                 </div>
             </div>`;
         this.root.querySelector('#cm-open-settings').addEventListener('click', () => {
-            chrome.runtime.openOptionsPage();
+            chrome.runtime.sendMessage({ action: 'openSettings' });
         });
     }
 
@@ -187,7 +187,7 @@ class CanvasMessenger {
         this.$convList = wrap.querySelector('#cm-conv-list');
         this.$main     = wrap.querySelector('#cm-main');
 
-        wrap.querySelector('#cm-settings-btn').addEventListener('click', () => chrome.runtime.openOptionsPage());
+        wrap.querySelector('#cm-settings-btn').addEventListener('click', () => chrome.runtime.sendMessage({ action: 'openSettings' }));
         wrap.querySelector('#cm-compose-btn').addEventListener('click', () => this.renderCompose());
         wrap.querySelectorAll('.cm-tab').forEach(btn => {
             btn.addEventListener('click', () => {

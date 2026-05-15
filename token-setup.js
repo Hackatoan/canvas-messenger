@@ -313,40 +313,66 @@
     // ── Direct API token creation ─────────────────────────────────────────
     async function tryCreateTokenViaAPI() {
         try {
-            // Canvas embeds the CSRF token in every page
             const csrf =
                 document.querySelector('meta[name="csrf-token"]')?.content ||
-                window.ENV?.AUTHENTICITY_TOKEN;
-            if (!csrf) return null;
+                window.ENV?.AUTHENTICITY_TOKEN ||
+                document.querySelector('input[name="authenticity_token"]')?.value;
+            if (!csrf) {
+                updateOverlay('No CSRF token found — trying form…');
+                return null;
+            }
 
-            // Delete any existing "Canvas Messenger" tokens first so we don't
-            // accumulate duplicates across regenerations
             await deleteExistingTokensViaAPI(csrf);
 
-            // 119 days — within Canvas's 120-day maximum
             const expires = new Date(Date.now() + 119 * 864e5).toISOString();
 
-            const resp = await fetch('/api/v1/users/self/access_tokens', {
+            // Attempt 1: JSON body
+            let resp = await fetch('/api/v1/users/self/access_tokens', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Accept':       'application/json',
-                    'X-CSRF-Token': csrf,
+                    'Content-Type':   'application/json',
+                    'Accept':         'application/json',
+                    'X-CSRF-Token':   csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({
-                    access_token: {
-                        purpose:    'Canvas Messenger',
-                        expires_at: expires,
-                    },
+                    access_token: { purpose: 'Canvas Messenger', expires_at: expires },
                 }),
             });
 
-            if (!resp.ok) return null;
+            // Attempt 2: form-encoded (some Canvas instances require this)
+            if (!resp.ok) {
+                updateOverlay(`API attempt 1 failed (${resp.status}) — retrying…`);
+                resp = await fetch('/api/v1/users/self/access_tokens', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept':       'application/json',
+                        'X-CSRF-Token': csrf,
+                    },
+                    body: new URLSearchParams({
+                        authenticity_token:        csrf,
+                        'access_token[purpose]':    'Canvas Messenger',
+                        'access_token[expires_at]': expires,
+                    }),
+                });
+            }
+
+            if (!resp.ok) {
+                updateOverlay(`API failed (${resp.status}) — trying form…`);
+                return null;
+            }
+
             const data = await resp.json();
-            // Canvas returns the full token only on creation
-            return data.token || data.visible_token || data.full_token || null;
-        } catch {
+            // Canvas returns the full token only at creation time
+            return data.token          ||
+                   data.visible_token  ||
+                   data.full_token     ||
+                   data.access_token?.token || null;
+        } catch (e) {
+            updateOverlay(`API error — trying form… (${e.message})`);
             return null;
         }
     }

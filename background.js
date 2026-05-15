@@ -173,6 +173,7 @@ async function handleMessage(msg) {
         case 'getSettings':        return getSettings();
         case 'getCurrentUser':     return getCurrentUser();
         case 'updateBadge':        return updateBadge();
+        case 'openSettings':       chrome.runtime.openOptionsPage(); return { ok: true };
         default: throw new Error('UNKNOWN_ACTION');
     }
 }
