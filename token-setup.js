@@ -1,234 +1,288 @@
-// Runs on Canvas profile/settings pages only.
-// Auto-generates a Canvas API token and saves it to the extension with confirmation.
+// Runs on Canvas pages to auto-generate an API token when none is saved.
+// Works on the profile/settings page; on other Canvas pages shows a banner
+// linking the user there.
 
 (async () => {
-    // Only act if we're on the settings page AND no token is saved yet
     const { apiToken } = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
     if (apiToken) return;
 
-    if (!location.pathname.includes('/profile/settings') && !location.pathname.includes('/profile')) return;
+    // ── Detect Canvas ─────────────────────────────────────────────────────
+    const env = window.ENV || {};
+    const isCanvas = !!(
+        env.DOMAIN_ROOT_ACCOUNT_ID !== undefined ||
+        env.current_user_id        !== undefined ||
+        env.current_user           !== undefined ||
+        document.querySelector('.ic-app-header, #ic-app-header-primary') ||
+        document.querySelector('#application[data-account-id]')
+    );
+    if (!isCanvas) return;
 
-    // Make sure this is actually Canvas (ENV is set by Canvas)
-    if (!window.ENV) return;
-
-    // Wait for the page to be ready
     await new Promise(r => {
         if (document.readyState === 'complete') return r();
-        window.addEventListener('load', r);
+        window.addEventListener('load', r, { once: true });
     });
 
-    // ── Find the "New Access Token" link ────────────────────────────────────
-    // Canvas renders this differently across versions — try multiple selectors
-    function findNewTokenLink() {
-        return (
-            document.querySelector('a.add_access_token_link') ||
-            document.querySelector('[data-testid="new-access-token-button"]') ||
-            [...document.querySelectorAll('a, button')].find(el =>
-                /new access token|add.*(token|key)/i.test(el.textContent)
-            )
-        );
+    // ── Settings page detection ───────────────────────────────────────────
+    // Canvas profile settings can live at several paths
+    const path = location.pathname;
+    const isSettingsPage = (
+        path.includes('/profile/settings') ||
+        path.includes('/user_settings')    ||
+        path === '/profile'
+    );
+
+    if (!isSettingsPage) {
+        // On any other Canvas page: show a non-intrusive setup chip
+        showSetupChip();
+        return;
     }
 
-    const link = findNewTokenLink();
-    if (!link) return; // Can't find the button — bail silently
+    // On the settings page: wait a moment for dynamic content then inject
+    setTimeout(tryAutoSetup, 800);
 
-    // ── Inject a setup banner ───────────────────────────────────────────────
-    if (document.getElementById('cm-setup-banner')) return;
+    // ── Setup chip (shown on non-settings Canvas pages) ───────────────────
+    function showSetupChip() {
+        if (document.getElementById('cm-setup-chip')) return;
+        const chip = document.createElement('div');
+        chip.id    = 'cm-setup-chip';
+        chip.style.cssText = `
+            position: fixed; bottom: 90px; right: 24px; z-index: 99997;
+            background: #5865f2; color: #fff; border-radius: 24px;
+            padding: 8px 16px 8px 12px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px; font-weight: 600;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            animation: cm-fadein 0.3s ease;
+        `;
+        chip.innerHTML = `
+            <style>
+                @keyframes cm-fadein { from { opacity:0; transform:translateY(8px); } to { opacity:1; } }
+            </style>
+            <span style="font-size:16px">📚</span>
+            Set up Canvas Messenger
+            <span style="opacity:.7;font-size:11px;font-weight:400">click to connect</span>
+            <button style="background:none;border:none;color:rgba(255,255,255,.6);
+                cursor:pointer;font-size:16px;margin-left:4px;line-height:1;padding:0"
+                id="cm-chip-close">×</button>`;
 
-    const banner = document.createElement('div');
-    banner.id = 'cm-setup-banner';
-    banner.style.cssText = `
-        position: fixed; top: 16px; right: 16px; z-index: 99999;
-        background: #5865f2; color: #fff;
-        padding: 12px 18px; border-radius: 8px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 14px; font-weight: 600;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-        display: flex; align-items: center; gap: 12px;
-        max-width: 340px; line-height: 1.4;
-        animation: cm-slidein 0.3s ease;
-    `;
+        chip.addEventListener('click', e => {
+            if (e.target.id === 'cm-chip-close') { chip.remove(); return; }
+            // Navigate to Canvas profile settings
+            window.location.href = location.origin + '/profile/settings';
+        });
+        document.body.appendChild(chip);
+    }
 
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes cm-slidein {
-            from { transform: translateY(-20px); opacity: 0; }
-            to   { transform: translateY(0);     opacity: 1; }
-        }
-    `;
-    document.head.appendChild(style);
+    // ── Auto-setup on settings page ───────────────────────────────────────
+    function tryAutoSetup() {
+        if (document.getElementById('cm-setup-banner')) return;
 
-    banner.innerHTML = `
-        <span style="font-size:22px">📚</span>
-        <div style="flex:1">
-            <div>Canvas Messenger</div>
-            <div style="font-weight:400;font-size:12px;opacity:0.9;margin-top:2px">
-                Click to auto-generate your API token
-            </div>
-        </div>
-        <button id="cm-auto-token-btn" style="
-            background: #fff; color: #5865f2; border: none;
-            border-radius: 5px; padding: 6px 14px; font-size: 13px;
-            font-weight: 700; cursor: pointer; white-space: nowrap;
-        ">Set up</button>
-        <button id="cm-banner-close" style="
-            background: none; border: none; color: rgba(255,255,255,0.7);
-            font-size: 18px; cursor: pointer; padding: 0 0 0 4px; line-height: 1;
-        ">×</button>`;
-
-    document.body.appendChild(banner);
-
-    document.getElementById('cm-banner-close').addEventListener('click', () => banner.remove());
-
-    document.getElementById('cm-auto-token-btn').addEventListener('click', () => {
-        banner.remove();
-        runAutoSetup();
-    });
-
-    // ── Auto-setup flow ─────────────────────────────────────────────────────
-
-    async function runAutoSetup() {
-        showOverlay('Opening token dialog…');
-
-        // Click the "New Access Token" link to open the modal
-        link.click();
-
-        // Wait for a modal/dialog/form to appear
-        const form = await waitFor(() =>
-            document.querySelector('#access_token_form, form[action*="access_token"], [data-testid="access-token-form"]') ||
-            document.querySelector('[role="dialog"], .ui-dialog')
-        , 4000);
-
-        if (!form) {
-            showOverlay('Could not open token dialog automatically.<br>Please click "New Access Token" manually, then come back here.', true);
+        const link = findNewTokenLink();
+        if (!link) {
+            // Can't find the button — show a manual fallback banner
+            showManualBanner();
             return;
         }
 
-        // Fill in the purpose field
-        const purposeInput = form.querySelector('#access_token_purpose, input[name="purpose"], input[placeholder*="purpose" i]');
+        const banner = document.createElement('div');
+        banner.id    = 'cm-setup-banner';
+        banner.style.cssText = `
+            position: fixed; top: 16px; right: 16px; z-index: 99999;
+            background: #5865f2; color: #fff;
+            padding: 12px 16px; border-radius: 8px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 14px; font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            display: flex; align-items: center; gap: 12px; max-width: 360px;
+        `;
+        banner.innerHTML = `
+            <span style="font-size:22px;flex-shrink:0">📚</span>
+            <div style="flex:1;line-height:1.4">
+                Canvas Messenger<br>
+                <span style="font-weight:400;font-size:12px;opacity:.9">
+                    Auto-generate your API token to get started
+                </span>
+            </div>
+            <button id="cm-auto-btn" style="background:#fff;color:#5865f2;border:none;
+                border-radius:5px;padding:6px 14px;font-size:13px;font-weight:700;
+                cursor:pointer;white-space:nowrap">Set up</button>
+            <button id="cm-close-btn" style="background:none;border:none;
+                color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;
+                padding:0;line-height:1;flex-shrink:0">×</button>`;
+        document.body.appendChild(banner);
+
+        document.getElementById('cm-close-btn').addEventListener('click', () => banner.remove());
+        document.getElementById('cm-auto-btn').addEventListener('click', () => {
+            banner.remove();
+            runAutoSetup(link);
+        });
+    }
+
+    function showManualBanner() {
+        if (document.getElementById('cm-setup-banner')) return;
+        const banner = document.createElement('div');
+        banner.id    = 'cm-setup-banner';
+        banner.style.cssText = `
+            position: fixed; top: 16px; right: 16px; z-index: 99999;
+            background: #2b2d31; border: 1px solid #404249; color: #dcddde;
+            padding: 14px 18px; border-radius: 8px; max-width: 360px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); line-height:1.5;
+        `;
+        banner.innerHTML = `
+            <div style="font-weight:700;margin-bottom:6px">📚 Canvas Messenger setup</div>
+            To connect, click <strong>"+ New Access Token"</strong> on this page,
+            set the purpose to <strong>Canvas Messenger</strong>, then paste the
+            generated token into the extension settings.<br>
+            <div style="text-align:right;margin-top:10px">
+                <button onclick="this.closest('div[id]').remove()" style="background:none;
+                border:1px solid #404249;color:#dcddde;border-radius:4px;
+                padding:4px 12px;font-size:12px;cursor:pointer">Dismiss</button>
+                <button onclick="chrome.runtime.openOptionsPage()" style="background:#5865f2;
+                border:none;color:#fff;border-radius:4px;padding:4px 12px;
+                font-size:12px;cursor:pointer;margin-left:6px">Open settings</button>
+            </div>`;
+        document.body.appendChild(banner);
+    }
+
+    // ── Auto-setup flow ───────────────────────────────────────────────────
+    async function runAutoSetup(link) {
+        showOverlay('Opening token dialog…');
+        link.click();
+
+        const form = await waitFor(() =>
+            document.querySelector('#access_token_form, [data-testid="access-token-form"], .ui-dialog:not([style*="display: none"])')
+        , 5000);
+
+        if (!form) {
+            showOverlay('Could not open the token dialog automatically.<br>Please click "+ New Access Token" manually.', true);
+            return;
+        }
+
+        const purposeInput = form.querySelector(
+            '#access_token_purpose, input[name="purpose"], input[placeholder*="purpose" i]'
+        );
         if (purposeInput) {
             purposeInput.value = 'Canvas Messenger';
-            purposeInput.dispatchEvent(new Event('input', { bubbles: true }));
+            purposeInput.dispatchEvent(new Event('input',  { bubbles: true }));
             purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         updateOverlay('Generating token…');
 
-        // Click the generate/submit button
-        const submitBtn = form.querySelector(
-            'button[type="submit"], input[type="submit"], button.btn-primary, [data-testid="submit-button"]'
-        ) || [...form.querySelectorAll('button, input[type=submit]')].find(el =>
-            /generate|create|submit|save/i.test(el.textContent + el.value)
-        );
+        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]') ||
+            [...form.querySelectorAll('button')].find(b =>
+                /generate|create|submit|save/i.test(b.textContent)
+            );
 
         if (!submitBtn) {
-            showOverlay('Could not find the Generate button.<br>Please generate the token manually.', true);
+            showOverlay('Could not find the Generate button — please click it manually.', true);
             return;
         }
-
         submitBtn.click();
 
-        // Wait for the token to appear in the page (Canvas shows it once after generation)
-        const token = await waitForToken(6000);
-
+        const token = await waitForToken(8000);
         if (!token) {
-            showOverlay('Could not capture the token automatically.<br>Copy it manually and paste it in the extension settings.', true);
+            showOverlay('Could not capture the token — please copy it and paste into extension settings.', true);
             return;
         }
 
-        // ── Confirmation step ─────────────────────────────────────────────
         showConfirmation(token);
     }
-
-    // ── Wait for generated token to appear in the DOM ──────────────────────
 
     async function waitForToken(timeout) {
         const start = Date.now();
         return new Promise(resolve => {
-            const observer = new MutationObserver(() => {
-                const token = extractToken();
-                if (token) { observer.disconnect(); resolve(token); }
-                if (Date.now() - start > timeout) { observer.disconnect(); resolve(null); }
+            const obs = new MutationObserver(() => {
+                const t = extractToken();
+                if (t) { obs.disconnect(); return resolve(t); }
+                if (Date.now() - start > timeout) { obs.disconnect(); resolve(null); }
             });
-            observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-            setTimeout(() => { observer.disconnect(); resolve(extractToken()); }, timeout);
+            obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+            setTimeout(() => { obs.disconnect(); resolve(extractToken()); }, timeout);
         });
     }
 
     function extractToken() {
-        // Canvas shows the token in various places depending on version
+        // Check every text input and code element for something that looks like a Canvas token
         const candidates = [
-            document.querySelector('#token_box input, #token_box code, #token_value'),
-            document.querySelector('[data-testid="token-value"], .access_token_box'),
-            [...document.querySelectorAll('input[type=text], code')].find(el =>
-                /^[a-zA-Z0-9~_\-]{20,}$/.test((el.value || el.textContent || '').trim())
-            ),
+            ...document.querySelectorAll('input[type=text], input[type=password], code, pre, textarea'),
         ];
         for (const el of candidates) {
-            if (!el) continue;
             const val = (el.value || el.textContent || '').trim();
-            // Canvas tokens are long alphanumeric strings
             if (/^[a-zA-Z0-9~_\-]{20,}$/.test(val)) return val;
+        }
+        // Also check for token in alerts or notification text
+        const alerts = document.querySelectorAll('[role="alert"], .alert, .flash-message');
+        for (const el of alerts) {
+            const m = el.textContent.match(/[a-zA-Z0-9~_\-]{20,}/);
+            if (m) return m[0];
         }
         return null;
     }
 
-    // ── Confirmation overlay ───────────────────────────────────────────────
+    function findNewTokenLink() {
+        // Try several selectors Canvas uses across versions
+        return (
+            document.querySelector('a.add_access_token_link') ||
+            document.querySelector('[data-testid="new-access-token-button"]') ||
+            document.querySelector('button[data-testid="add-token"]') ||
+            [...document.querySelectorAll('a[href="#"], button, a')].find(el =>
+                /new access token|add.*token|\+.*token/i.test(el.textContent.trim())
+            )
+        );
+    }
 
+    // ── Confirmation overlay ──────────────────────────────────────────────
     function showConfirmation(token) {
-        const overlay = document.getElementById('cm-overlay');
-        if (overlay) overlay.remove();
-
+        document.getElementById('cm-overlay')?.remove();
         const el = document.createElement('div');
-        el.id = 'cm-confirm';
         el.style.cssText = `
-            position: fixed; inset: 0; z-index: 100000;
-            background: rgba(0,0,0,0.6);
-            display: flex; align-items: center; justify-content: center;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        `;
+            position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.65);
+            display:flex;align-items:center;justify-content:center;
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;`;
         el.innerHTML = `
-            <div style="
-                background: #2b2d31; color: #dcddde; border-radius: 12px;
-                padding: 28px 32px; max-width: 420px; width: 90%;
-                box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-            ">
+            <div style="background:#2b2d31;color:#dcddde;border-radius:12px;
+                padding:28px 32px;max-width:420px;width:90%;
+                box-shadow:0 8px 40px rgba(0,0,0,0.6);">
                 <div style="font-size:28px;margin-bottom:12px">📚</div>
-                <h2 style="color:#fff;font-size:18px;margin-bottom:8px">Token generated!</h2>
-                <p style="font-size:13px;color:#87898c;margin-bottom:20px;line-height:1.5">
-                    Canvas Messenger generated an API token with purpose <strong style="color:#dcddde">Canvas Messenger</strong>.
-                    Save it to the extension to finish setup?
+                <h2 style="color:#fff;font-size:18px;margin:0 0 8px">Token generated!</h2>
+                <p style="font-size:13px;color:#87898c;margin:0 0 20px;line-height:1.5">
+                    An API token was created with the purpose
+                    <strong style="color:#dcddde">Canvas Messenger</strong>.
+                    Save it to finish setup.
                 </p>
-                <div style="
-                    background:#1e1f22;border-radius:6px;padding:10px 14px;
+                <div style="background:#1e1f22;border-radius:6px;padding:10px 14px;
                     font-family:monospace;font-size:12px;color:#57f287;
-                    word-break:break-all;margin-bottom:20px;
-                ">
-                    ${token.slice(0, 8)}${'•'.repeat(Math.max(0, token.length - 16))}${token.slice(-8)}
+                    word-break:break-all;margin-bottom:20px;">
+                    ${token.slice(0,8)}${'•'.repeat(Math.max(0,token.length-16))}${token.slice(-8)}
                 </div>
                 <div style="display:flex;gap:10px;justify-content:flex-end">
-                    <button id="cm-confirm-cancel" style="
-                        background:#383a40;border:none;color:#dcddde;
-                        padding:9px 18px;border-radius:5px;font-size:14px;cursor:pointer;
-                    ">Cancel</button>
-                    <button id="cm-confirm-save" style="
-                        background:#5865f2;border:none;color:#fff;
-                        padding:9px 20px;border-radius:5px;font-size:14px;
-                        font-weight:600;cursor:pointer;
-                    ">Save to Extension</button>
+                    <button id="cm-confirm-cancel" style="background:#383a40;border:none;
+                        color:#dcddde;padding:9px 18px;border-radius:5px;
+                        font-size:14px;cursor:pointer;">Cancel</button>
+                    <button id="cm-confirm-save" style="background:#5865f2;border:none;
+                        color:#fff;padding:9px 20px;border-radius:5px;
+                        font-size:14px;font-weight:600;cursor:pointer;">Save to Extension</button>
                 </div>
             </div>`;
         document.body.appendChild(el);
 
-        document.getElementById('cm-confirm-cancel').addEventListener('click', () => el.remove());
-
-        document.getElementById('cm-confirm-save').addEventListener('click', async () => {
-            const canvasUrl = location.origin;
-            const user = window.ENV?.current_user || null;
+        el.querySelector('#cm-confirm-cancel').addEventListener('click', () => el.remove());
+        el.querySelector('#cm-confirm-save').addEventListener('click', async () => {
+            const env  = window.ENV || {};
+            const user = env.current_user || {};
             await new Promise(r => chrome.storage.local.set({
-                canvasUrl,
-                apiToken: token,
-                ...(user ? { currentUser: { id: user.id, name: user.display_name || user.name, login_id: user.email } } : {}),
+                canvasUrl: location.origin,
+                apiToken:  token,
+                ...(user.id ? {
+                    currentUser: {
+                        id:       user.id,
+                        name:     user.display_name || user.name || '',
+                        login_id: user.email || user.login_id || '',
+                    },
+                } : {}),
             }, r));
             chrome.runtime.sendMessage({ action: 'updateBadge' });
             el.remove();
@@ -239,58 +293,53 @@
     function showSuccess() {
         const el = document.createElement('div');
         el.style.cssText = `
-            position: fixed; top: 16px; right: 16px; z-index: 100000;
-            background: #57f287; color: #1a1a1a;
-            padding: 12px 20px; border-radius: 8px;
-            font-family: -apple-system, sans-serif;
-            font-size: 14px; font-weight: 700;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-        `;
+            position:fixed;top:16px;right:16px;z-index:100000;
+            background:#57f287;color:#1a1a1a;padding:12px 20px;border-radius:8px;
+            font-family:-apple-system,sans-serif;font-size:14px;font-weight:700;
+            box-shadow:0 4px 20px rgba(0,0,0,0.4);`;
         el.textContent = '✓ Canvas Messenger is ready!';
         document.body.appendChild(el);
         setTimeout(() => el.remove(), 4000);
     }
 
-    // ── Overlay helpers ────────────────────────────────────────────────────
-
+    // ── Helpers ───────────────────────────────────────────────────────────
     function showOverlay(msg, isError = false) {
         document.getElementById('cm-overlay')?.remove();
         const el = document.createElement('div');
-        el.id = 'cm-overlay';
+        el.id    = 'cm-overlay';
         el.style.cssText = `
-            position: fixed; bottom: 24px; right: 24px; z-index: 100000;
-            background: ${isError ? '#2c2020' : '#2b2d31'};
-            border: 1px solid ${isError ? '#ed4245' : '#404249'};
-            color: ${isError ? '#ed4245' : '#dcddde'};
-            padding: 14px 18px; border-radius: 8px;
-            font-family: -apple-system, sans-serif; font-size: 13px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-            max-width: 300px; line-height: 1.5;
-            display: flex; align-items: flex-start; gap: 10px;
-        `;
-        el.innerHTML = `<span>${isError ? '⚠' : '<div style="width:14px;height:14px;border:2px solid #404249;border-top-color:#5865f2;border-radius:50%;animation:cm-spin 0.7s linear infinite"></div>'}</span><span>${msg}</span>`;
+            position:fixed;bottom:24px;right:24px;z-index:100000;
+            background:${isError ? '#2c2020' : '#2b2d31'};
+            border:1px solid ${isError ? '#ed4245' : '#404249'};
+            color:${isError ? '#ed4245' : '#dcddde'};
+            padding:14px 18px;border-radius:8px;
+            font-family:-apple-system,sans-serif;font-size:13px;
+            box-shadow:0 4px 20px rgba(0,0,0,0.5);max-width:300px;line-height:1.5;
+            display:flex;align-items:flex-start;gap:10px;`;
+        const spinner = isError ? '⚠' :
+            `<div style="width:14px;height:14px;flex-shrink:0;border:2px solid #404249;
+                border-top-color:#5865f2;border-radius:50%;animation:s 0.7s linear infinite">
+                <style>@keyframes s{to{transform:rotate(360deg)}}</style></div>`;
+        el.innerHTML = `${spinner}<span>${msg}</span>`;
         document.body.appendChild(el);
-        if (isError) setTimeout(() => el.remove(), 8000);
+        if (isError) setTimeout(() => el.remove(), 10000);
     }
 
     function updateOverlay(msg) {
         const el = document.getElementById('cm-overlay');
-        if (el) el.querySelector('span:last-child').textContent = msg;
+        if (el) el.querySelector('span').textContent = msg;
     }
 
-    // ── Poll helper ────────────────────────────────────────────────────────
-
-    function waitFor(fn, timeout = 3000) {
+    function waitFor(fn, timeout = 4000) {
         return new Promise(resolve => {
             const start = Date.now();
-            const check = () => {
-                const result = fn();
-                if (result) return resolve(result);
+            const tick  = () => {
+                const r = fn();
+                if (r) return resolve(r);
                 if (Date.now() - start > timeout) return resolve(null);
-                requestAnimationFrame(check);
+                requestAnimationFrame(tick);
             };
-            check();
+            tick();
         });
     }
-
 })();
