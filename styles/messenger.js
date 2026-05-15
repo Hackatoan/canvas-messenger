@@ -717,16 +717,16 @@ class CanvasMessenger {
                     ${this.courses.length ? `
                     <div style="display:flex;gap:8px">
                         <div class="cm-field" style="flex:2">
-                            <label>Course</label>
+                            <label>Filter by course <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
                             <select id="cm-course-select">
-                                <option value="">— All courses —</option>
+                                <option value="">— Anyone on Canvas —</option>
                                 ${courseOptions}
                             </select>
                         </div>
                         <div class="cm-field" style="flex:1">
-                            <label>Show</label>
+                            <label>Role</label>
                             <select id="cm-role-filter">
-                                <option value="">Everyone</option>
+                                <option value="">Any</option>
                                 <option value="student">Students</option>
                                 <option value="teacher">Instructors</option>
                                 <option value="ta">TAs</option>
@@ -780,7 +780,7 @@ class CanvasMessenger {
 
         const input = document.createElement('input');
         input.className = 'cm-recipient-input';
-        input.placeholder = 'Search students, professors…';
+        input.placeholder = 'Search anyone on Canvas…';
         box.appendChild(input);
 
         const getContext = () => {
@@ -813,9 +813,8 @@ class CanvasMessenger {
             if (q.length < 2) { results.style.display = 'none'; return; }
             this.searchDebounce = setTimeout(async () => {
                 try {
-                    const role = getRole();
-                    const ctx = getContext();
-                    const data = await API.searchRecipients(q + (role ? `&enrollment_type[]=${role}` : ''), ctx);
+                    const ctx = getContext(); // optional course narrowing
+                    const data = await API.searchRecipients(q, ctx);
                     const users = Array.isArray(data) ? data : (data.users || []);
                     if (!users.length) { results.style.display = 'none'; return; }
                     results.innerHTML = users.slice(0, 10).map(u => `

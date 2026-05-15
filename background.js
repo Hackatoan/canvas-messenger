@@ -54,8 +54,12 @@ async function newConversation(recipients, subject, body) {
 }
 
 async function searchRecipients(search, context) {
-    const ctx = context ? `&context=${context}` : '';
-    return canvasFetch(`/search/recipients?search=${encodeURIComponent(search)}&per_page=20${ctx}`);
+    // search_all_contexts=true lets Canvas search across the entire institution,
+    // not just the current course. context is kept as an optional narrowing filter.
+    const ctx = context ? `&context=${encodeURIComponent(context)}` : '';
+    return canvasFetch(
+        `/search/recipients?search=${encodeURIComponent(search)}&type=user&search_all_contexts=true&per_page=30${ctx}`
+    );
 }
 
 async function getCourses() {
