@@ -274,33 +274,66 @@
             '.ReactModal__Content, .modal-content, .modal, .overlay'
         ) || document.body;
 
-        // Fill expiry date — use the input's own max attribute (set by Canvas to reflect
-        // the admin-configured limit, e.g. 120 days). Fall back to 120 days if no max.
-        const expInput = container.querySelector(
-            'input[name="expires_at"], input[type="date"], ' +
-            'input[placeholder*="expir" i], input[id*="expir" i], ' +
-            'input[aria-label*="expir" i], [data-testid*="expir"] input'
-        );
-        if (expInput) {
-            let dateVal;
-            if (expInput.type === 'date') {
-                // Use the max attribute directly if Canvas set one, else 120 days
-                dateVal = expInput.max || (() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + 120);
-                    return d.toISOString().split('T')[0];
-                })();
-            } else {
-                // Text-based date picker: parse max or compute 120 days
-                const maxRaw = expInput.max || expInput.getAttribute('data-max-date') || '';
-                const d = maxRaw ? new Date(maxRaw) : new Date(Date.now() + 120 * 864e5);
-                const mo  = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                dateVal = `${mo}/${day}/${d.getFullYear()}`;
+        // Fill expiry date + time — both required by Canvas.
+        // Canvas uses InstUI components (React-controlled inputs), so plain
+        // .value= assignment doesn't trigger React's internal state update.
+        // Use the native setter trick to force React to see the change.
+        function setReactValue(el, val) {
+            try {
+                const proto  = (el.tagName === 'SELECT')
+                    ? window.HTMLSelectElement.prototype
+                    : window.HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                if (setter) setter.call(el, val); else el.value = val;
+            } catch { el.value = val; }
+            el.dispatchEvent(new Event('input',  { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        // Resolve a field by label text — works regardless of id/name attributes
+        function findByLabel(root, pattern) {
+            for (const lbl of root.querySelectorAll('label, [class*="label" i]')) {
+                if (!pattern.test(lbl.textContent)) continue;
+                const id = lbl.htmlFor || lbl.getAttribute('for');
+                if (id) {
+                    const el = root.querySelector(`[id="${CSS.escape(id)}"]`) || document.getElementById(id);
+                    if (el) return el;
+                }
+                const inp = lbl.querySelector('input, select') ||
+                    lbl.closest('[class*="formField" i], [class*="form-field" i], div')
+                        ?.querySelector('input, select');
+                if (inp) return inp;
             }
-            expInput.value = dateVal;
-            expInput.dispatchEvent(new Event('input',  { bubbles: true }));
-            expInput.dispatchEvent(new Event('change', { bubbles: true }));
+            return null;
+        }
+
+        // 119 days from now — safely within Canvas's 120-day maximum
+        const expDate = new Date(Date.now() + 119 * 864e5);
+        const expMo   = String(expDate.getMonth() + 1).padStart(2, '0');
+        const expDay  = String(expDate.getDate()).padStart(2, '0');
+        const expDateStr = `${expMo}/${expDay}/${expDate.getFullYear()}`; // MM/DD/YYYY
+
+        const expInput =
+            findByLabel(container, /expiration\s*date/i) ||
+            container.querySelector(
+                'input[name="expires_at"], input[id*="expir" i], ' +
+                'input[placeholder*="expir" i], input[aria-label*="expir" i], ' +
+                '[data-testid*="expir" i] input, [data-testid*="date" i] input'
+            );
+        if (expInput) setReactValue(expInput, expDateStr);
+
+        // Expiration time dropdown — pick the last option (latest, e.g. 11:59pm)
+        const timeSelect =
+            findByLabel(container, /expiration\s*time/i) ||
+            container.querySelector(
+                'select[name*="expir" i], select[id*="time" i], ' +
+                'select[aria-label*="time" i], [data-testid*="time" i] select'
+            ) ||
+            [...container.querySelectorAll('select')].find(s =>
+                /expir|time/i.test((s.name || '') + (s.id || '') + (s.getAttribute('aria-label') || ''))
+            );
+        if (timeSelect?.options?.length) {
+            setReactValue(timeSelect, timeSelect.options[timeSelect.options.length - 1].value);
         }
 
         updateOverlay('Generating token…');
