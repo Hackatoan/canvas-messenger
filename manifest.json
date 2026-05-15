@@ -1,22 +1,42 @@
 {
   "manifest_version": 3,
   "name": "Canvas Messenger",
-  "version": "1.0.0",
-  "description": "Discord-style messaging for Canvas — chat with students and professors directly.",
-  "permissions": ["storage", "alarms", "scripting"],
-  "host_permissions": ["https://*/*", "http://*/*"],
+  "version": "1.6.0",
+  "description": "Discord-style messaging for Canvas \u2014 chat with students and professors directly.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "content_scripts": [
     {
-      "matches": ["https://*/*", "http://*/*"],
-      "js": ["styles/messenger.js", "content.js"],
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "styles/messenger.js",
+        "content.js"
+      ],
       "run_at": "document_end"
     },
     {
-      "matches": ["https://*/*", "http://*/*"],
-      "js": ["token-setup.js"],
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "token-setup.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -25,8 +45,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["styles/messenger.css"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "styles/messenger.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "options_ui": {
@@ -38,7 +62,9 @@
       "id": "canvas-messenger@hackatoa",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": ["none"],
+        "required": [
+          "none"
+        ],
         "optional": []
       }
     }
