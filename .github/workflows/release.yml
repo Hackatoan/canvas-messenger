@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Install web-ext
+        run: npm install -g web-ext
+
+      - name: Sign Firefox extension
+        run: |
+          web-ext sign \
+            --source-dir=dist/firefox \
+            --channel=unlisted \
+            --api-key="${{ secrets.AMO_API_KEY }}" \
+            --api-secret="${{ secrets.AMO_API_SECRET }}" \
+            --artifacts-dir=dist/signed
+          echo "XPI=$(ls dist/signed/*.xpi)" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            dist/canvas-messenger-chrome.zip \
+            "$XPI" \
+            --title "Canvas Messenger ${{ github.ref_name }}" \
+            --notes "## Install
+
+**Firefox:** Download the \`.xpi\` → drag into Firefox, or \`about:addons\` → gear → Install Add-on From File.
+
+**Chrome:** Download \`canvas-messenger-chrome.zip\` → unzip → \`chrome://extensions\` → Developer mode → Load unpacked."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
