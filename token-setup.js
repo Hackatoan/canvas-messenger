@@ -377,16 +377,21 @@
         const m = location.pathname.match(
             /^(.*?)\/(?:profile|courses|users|groups|accounts|calendar|dashboard|grades|files|conversations)\b/
         );
-        return m ? m[1] : '';
+        const base = m ? m[1] : '';
+        console.log('[CM token-setup] canvasBase:', JSON.stringify(base),
+            '| pathname:', location.pathname, '| origin:', location.origin);
+        return base;
     }
 
     // ── Direct API token creation ─────────────────────────────────────────
     async function tryCreateTokenViaAPI() {
         try {
-            const csrf =
-                document.querySelector('meta[name="csrf-token"]')?.content ||
-                window.ENV?.AUTHENTICITY_TOKEN ||
-                document.querySelector('input[name="authenticity_token"]')?.value;
+            const metaCsrf  = document.querySelector('meta[name="csrf-token"]')?.content;
+            const envCsrf   = window.ENV?.AUTHENTICITY_TOKEN;
+            const inputCsrf = document.querySelector('input[name="authenticity_token"]')?.value;
+            const csrf = metaCsrf || envCsrf || inputCsrf;
+            console.log('[CM token-setup] CSRF sources — meta:', !!metaCsrf,
+                'ENV:', !!envCsrf, 'input:', !!inputCsrf, '| using:', csrf?.slice(0,12) + '…');
             if (!csrf) {
                 updateOverlay('No CSRF token found — trying form…');
                 return null;
@@ -394,13 +399,15 @@
 
             const base    = canvasBase();
             const apiBase = location.origin + base;
+            const url     = `${apiBase}/api/v1/users/self/access_tokens`;
+            console.log('[CM token-setup] POST →', url);
 
             await deleteExistingTokensViaAPI(csrf, apiBase);
 
             const expires = new Date(Date.now() + 119 * 864e5).toISOString();
 
             // Attempt 1: JSON body
-            let resp = await fetch(`${apiBase}/api/v1/users/self/access_tokens`, {
+            let resp = await fetch(url, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -413,11 +420,12 @@
                     access_token: { purpose: 'Canvas Messenger', expires_at: expires },
                 }),
             });
+            console.log('[CM token-setup] attempt 1 status:', resp.status);
 
-            // Attempt 2: form-encoded (some Canvas instances require this)
+            // Attempt 2: form-encoded
             if (!resp.ok) {
                 updateOverlay(`API attempt 1 failed (${resp.status}) — retrying…`);
-                resp = await fetch(`${apiBase}/api/v1/users/self/access_tokens`, {
+                resp = await fetch(url, {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: {
@@ -431,19 +439,24 @@
                         'access_token[expires_at]': expires,
                     }),
                 });
+                console.log('[CM token-setup] attempt 2 status:', resp.status);
             }
 
             if (!resp.ok) {
+                const body = await resp.text().catch(() => '');
+                console.warn('[CM token-setup] API failed. Body:', body.slice(0, 300));
                 updateOverlay(`API failed (${resp.status}) — trying form…`);
                 return null;
             }
 
             const data = await resp.json();
+            console.log('[CM token-setup] API success. Response keys:', Object.keys(data));
             return data.token          ||
                    data.visible_token  ||
                    data.full_token     ||
                    data.access_token?.token || null;
         } catch (e) {
+            console.error('[CM token-setup] API exception:', e);
             updateOverlay(`API error — trying form… (${e.message})`);
             return null;
         }

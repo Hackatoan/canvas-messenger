@@ -1,0 +1,24 @@
+{
+  "name": "canvas-messenger",
+  "version": "1.0.0",
+  "description": "A browser extension that adds Discord-style messaging to Canvas LMS — direct messages, group chats, class-wide channels, and team/group communication, all without leaving Canvas.",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hackatoan/canvas-messenger.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Hackatoan/canvas-messenger/issues"
+  },
+  "homepage": "https://github.com/Hackatoan/canvas-messenger#readme",
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
+}
