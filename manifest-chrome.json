@@ -11,7 +11,7 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
-      "js": ["content.js"],
+      "js": ["styles/messenger.js", "content.js"],
       "run_at": "document_end"
     },
     {

@@ -138,11 +138,8 @@
     appRoot.style.cssText = 'width:100%;height:100vh;overflow:hidden;';
     shadow.appendChild(appRoot);
 
-    const jsResp = await fetch(chrome.runtime.getURL('styles/messenger.js'));
-    const jsText = await jsResp.text();
-    const fn = new Function(jsText); // eslint-disable-line no-new-func
-    fn();
-
+    // CanvasMessenger is defined by styles/messenger.js which runs as a
+    // content script before this file (see manifest content_scripts order).
     new CanvasMessenger(appRoot, { popup: false }); // eslint-disable-line no-undef
 
     // ── Toggle logic ──────────────────────────────────────────────────────
