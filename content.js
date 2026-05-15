@@ -68,6 +68,59 @@
     `;
     document.head.appendChild(styleEl);
 
+    // ── Floating chat button ──────────────────────────────────────────────
+    const fabStyle = document.createElement('style');
+    fabStyle.textContent = `
+        #cm-fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: #5865f2;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            z-index: 99998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+            transition: transform 0.15s, background 0.15s, right 0.28s cubic-bezier(0.4,0,0.2,1);
+        }
+        #cm-fab:hover { background: #4752c4; transform: scale(1.08); }
+        #cm-fab.cm-open { background: #404249; right: calc(${PANEL_W}px + 14px); }
+        #cm-fab.cm-open:hover { background: #35373c; }
+        #cm-fab .cm-fab-badge {
+            position: absolute;
+            top: -3px; right: -3px;
+            background: #ed4245;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            min-width: 17px;
+            height: 17px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            font-family: -apple-system, sans-serif;
+            pointer-events: none;
+        }
+    `;
+    document.head.appendChild(fabStyle);
+
+    const fab = document.createElement('button');
+    fab.id = 'cm-fab';
+    fab.title = 'Canvas Messenger';
+    fab.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>`;
+    document.body.appendChild(fab);
+
     // ── Panel (shadow DOM for CSS isolation) ──────────────────────────────
     const host = document.createElement('div');
     host.id = 'cm-host';
@@ -99,17 +152,23 @@
         isOpen = true;
         host.classList.add('cm-open');
         document.body.classList.add('cm-panel-open');
+        fab.classList.add('cm-open');
+        fab.title = 'Close Canvas Messenger';
     }
 
     function closePanel() {
         isOpen = false;
         host.classList.remove('cm-open');
         document.body.classList.remove('cm-panel-open');
+        fab.classList.remove('cm-open');
+        fab.title = 'Canvas Messenger';
     }
 
     function togglePanel() {
         isOpen ? closePanel() : openPanel();
     }
+
+    fab.addEventListener('click', togglePanel);
 
     // Extension icon click (message from background)
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -124,7 +183,7 @@
         if (e.key === 'Escape' && isOpen) closePanel();
     });
 
-    // ── Unread badge on extension icon ────────────────────────────────────
+    // ── Unread badge on FAB ───────────────────────────────────────────────
     async function updateBadge() {
         try {
             const convs = await new Promise(r =>
@@ -132,10 +191,18 @@
             );
             const count = Array.isArray(convs) ? convs.length : 0;
             chrome.runtime.sendMessage({ action: 'updateBadge' });
-            // Update page title prefix
-            const prefix = count > 0 ? `(${count}) ` : '';
-            if (!document._cmOrigTitle) document._cmOrigTitle = document.title;
-            document.title = prefix + document._cmOrigTitle;
+
+            let badge = fab.querySelector('.cm-fab-badge');
+            if (count > 0) {
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'cm-fab-badge';
+                    fab.appendChild(badge);
+                }
+                badge.textContent = count > 99 ? '99+' : String(count);
+            } else {
+                badge?.remove();
+            }
         } catch {}
     }
 
