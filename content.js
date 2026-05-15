@@ -96,15 +96,7 @@
             padding: 0 4px; font-family: -apple-system,sans-serif;
             pointer-events: none;
         }
-        #cm-resize-handle {
-            position: absolute; left: 0; top: 0;
-            width: 5px; height: 100%;
-            cursor: ew-resize; z-index: 1;
-            transition: background 0.15s;
-        }
-        #cm-resize-handle:hover,
-        #cm-resize-handle.dragging { background: rgba(88,101,242,0.35); }
-        `;
+`;
     }
 
     pageStyle.textContent = buildPageCSS(PANEL_W);
@@ -168,14 +160,21 @@
         if (e.key === 'Escape' && isOpen) closePanel();
     });
 
-    // ── Resize handle ─────────────────────────────────────────────────────
+    // ── Resize handle (lives in shadow so it renders over the panel) ────────
     const handle = document.createElement('div');
     handle.id    = 'cm-resize-handle';
-    host.appendChild(handle);
+    // Inline styles — page CSS can't reach inside shadow DOM
+    handle.style.cssText = `
+        position:absolute;left:0;top:0;width:6px;height:100%;
+        cursor:ew-resize;z-index:1000;box-sizing:border-box;
+        transition:background 0.15s;
+    `;
+    // handle goes into the shadow, not the light DOM of a shadow host
+    shadow.appendChild(handle);
 
     handle.addEventListener('mousedown', e => {
         e.preventDefault();
-        handle.classList.add('dragging');
+        handle.style.background = 'rgba(88,101,242,0.45)';
         const startX = e.clientX;
         const startW = PANEL_W;
 
@@ -191,10 +190,9 @@
         }
 
         function onUp() {
-            handle.classList.remove('dragging');
+            handle.style.background = '';
             host.style.transition   = '';
             document.body.style.transition = '';
-            // Persist and rebuild CSS so header tracking updates
             localStorage.setItem('cm-panel-width', PANEL_W);
             applyWidth(PANEL_W);
             fab.style.right = '';
@@ -204,6 +202,13 @@
 
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup',   onUp);
+    });
+
+    handle.addEventListener('mouseenter', () => {
+        handle.style.background = 'rgba(88,101,242,0.25)';
+    });
+    handle.addEventListener('mouseleave', () => {
+        handle.style.background = '';
     });
 
     // ── Load messenger CSS into shadow, init app ──────────────────────────

@@ -1,10 +1,9 @@
 // Runs on Canvas pages to auto-generate an API token when none is saved.
-// Works on the profile/settings page; on other Canvas pages shows a banner
-// linking the user there.
+// On the settings page: detects existing "Canvas Messenger" tokens and
+// offers to regenerate them. On other Canvas pages shows a setup chip.
 
 (async () => {
-    const { apiToken } = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
-    if (apiToken) return;
+    const stored = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
 
     // ── Detect Canvas ─────────────────────────────────────────────────────
     const env = window.ENV || {};
@@ -23,7 +22,6 @@
     });
 
     // ── Settings page detection ───────────────────────────────────────────
-    // Canvas profile settings can live at several paths
     const path = location.pathname;
     const isSettingsPage = (
         path.includes('/profile/settings') ||
@@ -32,13 +30,13 @@
     );
 
     if (!isSettingsPage) {
-        // On any other Canvas page: show a non-intrusive setup chip
-        showSetupChip();
+        // Only show chip if not already set up
+        if (!stored.apiToken) showSetupChip();
         return;
     }
 
-    // On the settings page: wait a moment for dynamic content then inject
-    setTimeout(tryAutoSetup, 800);
+    // On settings page: always check — even if token stored we may need to regen
+    setTimeout(tryAutoSetup, 1500);
 
     // ── Setup chip (shown on non-settings Canvas pages) ───────────────────
     function showSetupChip() {
@@ -68,55 +66,118 @@
 
         chip.addEventListener('click', e => {
             if (e.target.id === 'cm-chip-close') { chip.remove(); return; }
-            // Navigate to Canvas profile settings
             window.location.href = location.origin + '/profile/settings';
         });
         document.body.appendChild(chip);
+    }
+
+    // ── Detect existing "Canvas Messenger" token rows in the DOM ─────────
+    function findExistingTokenRow() {
+        // Canvas renders tokens in a table/list; rows vary by version
+        const rows = [
+            ...document.querySelectorAll(
+                '.access_token, tr, [data-testid*="token"], .ic-Table-row, li'
+            ),
+        ];
+        return rows.find(row => {
+            const text = row.textContent || '';
+            if (!/canvas\s*messenger/i.test(text)) return false;
+            // Must also have a delete action within the same row
+            return !!(
+                row.querySelector('a.delete_key_link, [data-testid*="delete"], a[href*="delete"]') ||
+                [...row.querySelectorAll('button, a')].find(b =>
+                    /delete|revoke|remove/i.test(b.textContent)
+                )
+            );
+        });
     }
 
     // ── Auto-setup on settings page ───────────────────────────────────────
     function tryAutoSetup() {
         if (document.getElementById('cm-setup-banner')) return;
 
-        const link = findNewTokenLink();
-        if (!link) {
-            // Can't find the button — show a manual fallback banner
-            showManualBanner();
+        const existingRow = findExistingTokenRow();
+        const newTokenLink = findNewTokenLink();
+
+        if (existingRow) {
+            showRegenBanner(existingRow, newTokenLink);
             return;
         }
 
-        const banner = document.createElement('div');
-        banner.id    = 'cm-setup-banner';
-        banner.style.cssText = `
+        // No token stored, no existing row — offer first-time setup
+        if (!stored.apiToken) {
+            if (!newTokenLink) {
+                showManualBanner();
+                return;
+            }
+            showSetupBanner(newTokenLink);
+        }
+    }
+
+    // ── Setup banner (first-time) ─────────────────────────────────────────
+    function showSetupBanner(link) {
+        const banner = makeBanner(
+            'Canvas Messenger',
+            'Auto-generate your API token to get started',
+            'Set up'
+        );
+        document.body.appendChild(banner);
+        document.getElementById('cm-action-btn').addEventListener('click', () => {
+            banner.remove();
+            runAutoSetup(link);
+        });
+        document.getElementById('cm-close-btn').addEventListener('click', () => banner.remove());
+    }
+
+    // ── Regen banner (existing token found) ──────────────────────────────
+    function showRegenBanner(existingRow, newTokenLink) {
+        const banner = makeBanner(
+            'Canvas Messenger — Regenerate Token',
+            'A "Canvas Messenger" token already exists. Delete it and generate a fresh one?',
+            'Regenerate'
+        );
+        document.body.appendChild(banner);
+        document.getElementById('cm-action-btn').addEventListener('click', async () => {
+            banner.remove();
+            await deleteExistingToken(existingRow);
+            const link = newTokenLink || findNewTokenLink();
+            if (!link) { showManualBanner(); return; }
+            runAutoSetup(link);
+        });
+        document.getElementById('cm-close-btn').addEventListener('click', () => banner.remove());
+    }
+
+    function makeBanner(title, subtitle, actionLabel) {
+        const el = document.createElement('div');
+        el.id = 'cm-setup-banner';
+        el.style.cssText = `
             position: fixed; top: 16px; right: 16px; z-index: 99999;
             background: #5865f2; color: #fff;
             padding: 12px 16px; border-radius: 8px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             font-size: 14px; font-weight: 600;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            display: flex; align-items: center; gap: 12px; max-width: 360px;
+            display: flex; align-items: center; gap: 12px; max-width: 380px;
         `;
-        banner.innerHTML = `
+        el.innerHTML = `
             <span style="font-size:22px;flex-shrink:0">📚</span>
             <div style="flex:1;line-height:1.4">
-                Canvas Messenger<br>
-                <span style="font-weight:400;font-size:12px;opacity:.9">
-                    Auto-generate your API token to get started
-                </span>
+                ${escH(title)}<br>
+                <span style="font-weight:400;font-size:12px;opacity:.9">${escH(subtitle)}</span>
             </div>
-            <button id="cm-auto-btn" style="background:#fff;color:#5865f2;border:none;
+            <button id="cm-action-btn" style="background:#fff;color:#5865f2;border:none;
                 border-radius:5px;padding:6px 14px;font-size:13px;font-weight:700;
-                cursor:pointer;white-space:nowrap">Set up</button>
+                cursor:pointer;white-space:nowrap">${escH(actionLabel)}</button>
             <button id="cm-close-btn" style="background:none;border:none;
                 color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;
                 padding:0;line-height:1;flex-shrink:0">×</button>`;
-        document.body.appendChild(banner);
+        return el;
+    }
 
-        document.getElementById('cm-close-btn').addEventListener('click', () => banner.remove());
-        document.getElementById('cm-auto-btn').addEventListener('click', () => {
-            banner.remove();
-            runAutoSetup(link);
-        });
+    function escH(s) {
+        return String(s).replace(/[&<>"']/g, c =>
+            ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
+        );
     }
 
     function showManualBanner() {
@@ -146,14 +207,48 @@
         document.body.appendChild(banner);
     }
 
+    // ── Delete an existing token row ──────────────────────────────────────
+    async function deleteExistingToken(row) {
+        const deleteBtn =
+            row.querySelector('a.delete_key_link, [data-testid*="delete"]') ||
+            [...row.querySelectorAll('button, a')].find(b =>
+                /delete|revoke|remove/i.test(b.textContent)
+            );
+        if (!deleteBtn) return;
+
+        showOverlay('Removing existing Canvas Messenger token…');
+        deleteBtn.click();
+
+        // Wait for a confirmation dialog and click OK/Confirm
+        const confirmBtn = await waitFor(() =>
+            document.querySelector(
+                '.ui-dialog:not([style*="display: none"]) button[type="submit"], ' +
+                '[data-testid="confirm-delete-button"], ' +
+                '.ReactModalPortal button[type="submit"]'
+            ) ||
+            [...document.querySelectorAll('button')].find(b =>
+                /ok|confirm|yes|delete/i.test(b.textContent) &&
+                b.offsetParent !== null
+            )
+        , 4000);
+
+        if (confirmBtn) confirmBtn.click();
+        await new Promise(r => setTimeout(r, 800));
+    }
+
     // ── Auto-setup flow ───────────────────────────────────────────────────
     async function runAutoSetup(link) {
         showOverlay('Opening token dialog…');
         link.click();
 
         const form = await waitFor(() =>
-            document.querySelector('#access_token_form, [data-testid="access-token-form"], .ui-dialog:not([style*="display: none"])')
-        , 5000);
+            document.querySelector(
+                '#access_token_form, ' +
+                '[data-testid="access-token-form"], ' +
+                '.ui-dialog:not([style*="display: none"]), ' +
+                '.ReactModalPortal [role="dialog"]'
+            )
+        , 6000);
 
         if (!form) {
             showOverlay('Could not open the token dialog automatically.<br>Please click "+ New Access Token" manually.', true);
@@ -161,9 +256,10 @@
         }
 
         const purposeInput = form.querySelector(
-            '#access_token_purpose, input[name="purpose"], input[placeholder*="purpose" i]'
+            '#access_token_purpose, input[name="purpose"], input[placeholder*="purpose" i], input[id*="purpose" i]'
         );
         if (purposeInput) {
+            purposeInput.focus();
             purposeInput.value = 'Canvas Messenger';
             purposeInput.dispatchEvent(new Event('input',  { bubbles: true }));
             purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -171,7 +267,8 @@
 
         updateOverlay('Generating token…');
 
-        const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]') ||
+        const submitBtn =
+            form.querySelector('button[type="submit"], input[type="submit"]') ||
             [...form.querySelectorAll('button')].find(b =>
                 /generate|create|submit|save/i.test(b.textContent)
             );
@@ -205,7 +302,6 @@
     }
 
     function extractToken() {
-        // Check every text input and code element for something that looks like a Canvas token
         const candidates = [
             ...document.querySelectorAll('input[type=text], input[type=password], code, pre, textarea'),
         ];
@@ -213,8 +309,7 @@
             const val = (el.value || el.textContent || '').trim();
             if (/^[a-zA-Z0-9~_\-]{20,}$/.test(val)) return val;
         }
-        // Also check for token in alerts or notification text
-        const alerts = document.querySelectorAll('[role="alert"], .alert, .flash-message');
+        const alerts = document.querySelectorAll('[role="alert"], .alert, .flash-message, .ReactModalPortal');
         for (const el of alerts) {
             const m = el.textContent.match(/[a-zA-Z0-9~_\-]{20,}/);
             if (m) return m[0];
@@ -223,7 +318,6 @@
     }
 
     function findNewTokenLink() {
-        // Try several selectors Canvas uses across versions
         return (
             document.querySelector('a.add_access_token_link') ||
             document.querySelector('[data-testid="new-access-token-button"]') ||
