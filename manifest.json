@@ -23,6 +23,12 @@
   "action": {
     "default_title": "Canvas Messenger"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["styles/messenger.css"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "options_ui": {
     "page": "options/options.html",
     "open_in_tab": true
