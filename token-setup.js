@@ -244,36 +244,42 @@
         showOverlay('Opening token dialog…');
         link.click();
 
-        const form = await waitFor(() =>
-            document.querySelector(
-                '#access_token_form, ' +
-                '[data-testid="access-token-form"], ' +
-                '.ui-dialog:not([style*="display: none"]), ' +
-                '.ReactModalPortal [role="dialog"]'
-            )
-        , 6000);
+        // Look for the purpose input directly — avoids depending on a specific
+        // dialog container selector which varies heavily across Canvas versions.
+        const purposeInput = await waitFor(() => {
+            const inp = document.querySelector(
+                '#access_token_purpose, ' +
+                'input[name="purpose"], ' +
+                'input[placeholder*="purpose" i], ' +
+                'input[id*="purpose" i], ' +
+                'input[aria-label*="purpose" i], ' +
+                '[data-testid*="purpose"] input'
+            );
+            return (inp && inp.offsetParent !== null) ? inp : null;
+        }, 8000);
 
-        if (!form) {
+        if (!purposeInput) {
             showOverlay('Could not open the token dialog automatically.<br>Please click "+ New Access Token" manually.', true);
             return;
         }
 
-        const purposeInput = form.querySelector(
-            '#access_token_purpose, input[name="purpose"], input[placeholder*="purpose" i], input[id*="purpose" i]'
-        );
-        if (purposeInput) {
-            purposeInput.focus();
-            purposeInput.value = 'Canvas Messenger';
-            purposeInput.dispatchEvent(new Event('input',  { bubbles: true }));
-            purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
-        }
+        purposeInput.focus();
+        purposeInput.value = 'Canvas Messenger';
+        purposeInput.dispatchEvent(new Event('input',  { bubbles: true }));
+        purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
 
         updateOverlay('Generating token…');
 
+        // Scope submit button search to the same dialog/form as the input
+        const container = purposeInput.closest(
+            'form, [role="dialog"], dialog, .ui-dialog, ' +
+            '.ReactModal__Content, .modal-content, .modal, .overlay'
+        ) || document.body;
+
         const submitBtn =
-            form.querySelector('button[type="submit"], input[type="submit"]') ||
-            [...form.querySelectorAll('button')].find(b =>
-                /generate|create|submit|save/i.test(b.textContent)
+            container.querySelector('button[type="submit"], input[type="submit"]') ||
+            [...container.querySelectorAll('button')].find(b =>
+                /generate|create|submit|save/i.test(b.textContent.trim())
             );
 
         if (!submitBtn) {
