@@ -372,6 +372,14 @@
         showConfirmation(token);
     }
 
+    // Detect Canvas app base path — handles installs at subpaths like /canvas/
+    function canvasBase() {
+        const m = location.pathname.match(
+            /^(.*?)\/(?:profile|courses|users|groups|accounts|calendar|dashboard|grades|files|conversations)\b/
+        );
+        return m ? m[1] : '';
+    }
+
     // ── Direct API token creation ─────────────────────────────────────────
     async function tryCreateTokenViaAPI() {
         try {
@@ -384,18 +392,21 @@
                 return null;
             }
 
-            await deleteExistingTokensViaAPI(csrf);
+            const base    = canvasBase();
+            const apiBase = location.origin + base;
+
+            await deleteExistingTokensViaAPI(csrf, apiBase);
 
             const expires = new Date(Date.now() + 119 * 864e5).toISOString();
 
             // Attempt 1: JSON body
-            let resp = await fetch('/api/v1/users/self/access_tokens', {
+            let resp = await fetch(`${apiBase}/api/v1/users/self/access_tokens`, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'Content-Type':   'application/json',
-                    'Accept':         'application/json',
-                    'X-CSRF-Token':   csrf,
+                    'Content-Type':     'application/json',
+                    'Accept':           'application/json',
+                    'X-CSRF-Token':     csrf,
                     'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({
@@ -406,7 +417,7 @@
             // Attempt 2: form-encoded (some Canvas instances require this)
             if (!resp.ok) {
                 updateOverlay(`API attempt 1 failed (${resp.status}) — retrying…`);
-                resp = await fetch('/api/v1/users/self/access_tokens', {
+                resp = await fetch(`${apiBase}/api/v1/users/self/access_tokens`, {
                     method: 'POST',
                     credentials: 'same-origin',
                     headers: {
@@ -428,7 +439,6 @@
             }
 
             const data = await resp.json();
-            // Canvas returns the full token only at creation time
             return data.token          ||
                    data.visible_token  ||
                    data.full_token     ||
@@ -439,9 +449,10 @@
         }
     }
 
-    async function deleteExistingTokensViaAPI(csrf) {
+    async function deleteExistingTokensViaAPI(csrf, apiBase) {
         try {
-            const resp = await fetch('/api/v1/users/self/access_tokens?per_page=50', {
+            apiBase = apiBase || (location.origin + canvasBase());
+            const resp = await fetch(`${apiBase}/api/v1/users/self/access_tokens?per_page=50`, {
                 credentials: 'same-origin',
                 headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf },
             });
@@ -450,7 +461,7 @@
             const userId = window.ENV?.current_user_id || 'self';
             for (const t of tokens) {
                 if (!/canvas\s*messenger/i.test(t.purpose || '')) continue;
-                await fetch(`/api/v1/users/${userId}/access_tokens/${t.id}`, {
+                await fetch(`${apiBase}/api/v1/users/${userId}/access_tokens/${t.id}`, {
                     method: 'DELETE',
                     credentials: 'same-origin',
                     headers: { 'X-CSRF-Token': csrf },
