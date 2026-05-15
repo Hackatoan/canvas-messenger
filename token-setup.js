@@ -274,22 +274,31 @@
             '.ReactModal__Content, .modal-content, .modal, .overlay'
         ) || document.body;
 
-        // Fill expiry date — some Canvas instances require it; set 1 year ahead
+        // Fill expiry date — use the input's own max attribute (set by Canvas to reflect
+        // the admin-configured limit, e.g. 120 days). Fall back to 120 days if no max.
         const expInput = container.querySelector(
             'input[name="expires_at"], input[type="date"], ' +
             'input[placeholder*="expir" i], input[id*="expir" i], ' +
             'input[aria-label*="expir" i], [data-testid*="expir"] input'
         );
         if (expInput) {
-            const d = new Date();
-            d.setFullYear(d.getFullYear() + 1);
+            let dateVal;
             if (expInput.type === 'date') {
-                expInput.value = d.toISOString().split('T')[0];          // YYYY-MM-DD
+                // Use the max attribute directly if Canvas set one, else 120 days
+                dateVal = expInput.max || (() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + 120);
+                    return d.toISOString().split('T')[0];
+                })();
             } else {
+                // Text-based date picker: parse max or compute 120 days
+                const maxRaw = expInput.max || expInput.getAttribute('data-max-date') || '';
+                const d = maxRaw ? new Date(maxRaw) : new Date(Date.now() + 120 * 864e5);
                 const mo  = String(d.getMonth() + 1).padStart(2, '0');
                 const day = String(d.getDate()).padStart(2, '0');
-                expInput.value = `${mo}/${day}/${d.getFullYear()}`;      // MM/DD/YYYY text field
+                dateVal = `${mo}/${day}/${d.getFullYear()}`;
             }
+            expInput.value = dateVal;
             expInput.dispatchEvent(new Event('input',  { bubbles: true }));
             expInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
