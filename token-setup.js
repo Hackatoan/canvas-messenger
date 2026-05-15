@@ -248,18 +248,18 @@
 
     // ── Auto-setup: API-first, UI fallback ───────────────────────────────
     async function runAutoSetup(link) {
-        showOverlay('Creating token…');
+        showOverlay('Creating token via API…');
 
-        // Primary path: POST directly to the Canvas API using the browser's
-        // existing session cookie + the CSRF token already in the page.
-        // This is far more reliable than automating InstUI's date picker.
         const apiToken = await tryCreateTokenViaAPI();
         if (apiToken) {
             showConfirmation(apiToken);
             return;
         }
 
-        // Fallback: open the dialog and attempt UI automation
+        // Pause so the API error message is readable before fallback overwrites it
+        await new Promise(r => setTimeout(r, 2500));
+
+        // Fallback: open Canvas dialog + fill fields via page-context injection
         showOverlay('Opening token dialog…');
         link.click();
 
@@ -277,14 +277,76 @@
             return;
         }
 
-        const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-        function setVal(el, v) {
-            try { if (nativeSet) nativeSet.call(el, v); else el.value = v; } catch { el.value = v; }
-            el.dispatchEvent(new Event('input',  { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
+        updateOverlay('Filling form…');
+
+        // Firefox content scripts run in an isolated world whose HTMLInputElement
+        // prototype is separate from the page's React-wrapped prototype.
+        // Inject a tiny page-context script to set values so React sees the change.
+        const expDate = new Date(Date.now() + 119 * 864e5);
+        const expMo   = String(expDate.getMonth() + 1).padStart(2, '0');
+        const expDay  = String(expDate.getDate()).padStart(2, '0');
+        const expStr  = `${expMo}/${expDay}/${expDate.getFullYear()}`;
+
+        function pageSetValue(selector, value) {
+            const s = document.createElement('script');
+            s.textContent = `(function(){
+                var el = document.querySelector(${JSON.stringify(selector)});
+                if (!el) return;
+                var setter = Object.getOwnPropertyDescriptor(
+                    el.tagName === 'SELECT'
+                        ? HTMLSelectElement.prototype
+                        : HTMLInputElement.prototype,
+                    'value'
+                )?.set;
+                if (setter) setter.call(el, ${JSON.stringify(value)});
+                else el.value = ${JSON.stringify(value)};
+                el.dispatchEvent(new Event('input',  {bubbles:true}));
+                el.dispatchEvent(new Event('change', {bubbles:true}));
+            })();`;
+            (document.head || document.documentElement).appendChild(s);
+            s.remove();
         }
 
-        setVal(purposeInput, 'Canvas Messenger');
+        // Set purpose via page context
+        pageSetValue(
+            '#access_token_purpose, input[name="purpose"], input[id*="purpose" i]',
+            'Canvas Messenger'
+        );
+
+        // Wait for date input to be present then fill it
+        const expInput = await waitFor(() => {
+            const el = document.querySelector(
+                'input[name="expires_at"], input[id*="expir" i], ' +
+                'input[placeholder*="expir" i], input[aria-label*="expir" i]'
+            );
+            return (el && el.offsetParent !== null) ? el : null;
+        }, 3000);
+
+        if (expInput) {
+            // Build selector that uniquely identifies this element
+            const id = expInput.id ? `#${CSS.escape(expInput.id)}` :
+                       expInput.name ? `input[name="${CSS.escape(expInput.name)}"]` :
+                       'input[id*="expir" i]';
+            pageSetValue(id, expStr);
+            await new Promise(r => setTimeout(r, 150));
+            // Confirm typed date by pressing Tab (closes InstUI calendar)
+            expInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true }));
+        }
+
+        // Fill time select — last option = latest (e.g. 11:59pm)
+        await new Promise(r => setTimeout(r, 200));
+        const timeSelect = [...document.querySelectorAll('select')].find(s =>
+            /expir|time/i.test((s.name || '') + (s.id || '') + (s.getAttribute('aria-label') || ''))
+        );
+        if (timeSelect?.options?.length) {
+            pageSetValue(
+                timeSelect.id ? `#${CSS.escape(timeSelect.id)}` :
+                `select[name="${CSS.escape(timeSelect.name || '')}"]`,
+                timeSelect.options[timeSelect.options.length - 1].value
+            );
+        }
+
+        await new Promise(r => setTimeout(r, 300));
         updateOverlay('Generating token…');
 
         const container = purposeInput.closest(
