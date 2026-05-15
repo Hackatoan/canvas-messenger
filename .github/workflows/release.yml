@@ -41,15 +41,18 @@ jobs:
           AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
 
       - name: Create GitHub Release
-        run: |
-          gh release create "${{ github.ref_name }}" \
-            dist/canvas-messenger-chrome.zip \
-            "$XPI" \
-            --title "Canvas Messenger ${{ github.ref_name }}" \
-            --notes "## Install
-
-**Firefox:** Download the \`.xpi\` → drag into Firefox, or \`about:addons\` → gear → Install Add-on From File.
-
-**Chrome:** Download \`canvas-messenger-chrome.zip\` → unzip → \`chrome://extensions\` → Developer mode → Load unpacked."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          NOTES="## Install
+
+          **Firefox:** Download the \`.xpi\` → drag into Firefox, or \`about:addons\` → gear → Install Add-on From File.
+
+          **Chrome:** Download \`canvas-messenger-chrome.zip\` → unzip → \`chrome://extensions\` → Developer mode → Load unpacked."
+
+          gh release create "$TAG" \
+            dist/canvas-messenger-chrome.zip \
+            "$XPI" \
+            --title "Canvas Messenger $TAG" \
+            --notes "$NOTES"
