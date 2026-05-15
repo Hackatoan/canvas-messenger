@@ -210,19 +210,27 @@
         banner.querySelector('#cm-manual-settings').addEventListener('click', () => chrome.runtime.openOptionsPage());
     }
 
-    // ── Delete an existing token row ──────────────────────────────────────
+    // ── Delete an existing token row (DOM path, called from regen banner) ──
     async function deleteExistingToken(row) {
+        showOverlay('Removing existing Canvas Messenger token…');
+
+        // Try API deletion first (cleaner, no confirmation dialog needed)
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+        if (csrf) {
+            await deleteExistingTokensViaAPI(csrf);
+            await new Promise(r => setTimeout(r, 400));
+            return;
+        }
+
+        // DOM fallback
         const deleteBtn =
             row.querySelector('a.delete_key_link, [data-testid*="delete"]') ||
             [...row.querySelectorAll('button, a')].find(b =>
                 /delete|revoke|remove/i.test(b.textContent)
             );
         if (!deleteBtn) return;
-
-        showOverlay('Removing existing Canvas Messenger token…');
         deleteBtn.click();
 
-        // Wait for a confirmation dialog and click OK/Confirm
         const confirmBtn = await waitFor(() =>
             document.querySelector(
                 '.ui-dialog:not([style*="display: none"]) button[type="submit"], ' +
@@ -234,116 +242,60 @@
                 b.offsetParent !== null
             )
         , 4000);
-
         if (confirmBtn) confirmBtn.click();
         await new Promise(r => setTimeout(r, 800));
     }
 
-    // ── Auto-setup flow ───────────────────────────────────────────────────
+    // ── Auto-setup: API-first, UI fallback ───────────────────────────────
     async function runAutoSetup(link) {
+        showOverlay('Creating token…');
+
+        // Primary path: POST directly to the Canvas API using the browser's
+        // existing session cookie + the CSRF token already in the page.
+        // This is far more reliable than automating InstUI's date picker.
+        const apiToken = await tryCreateTokenViaAPI();
+        if (apiToken) {
+            showConfirmation(apiToken);
+            return;
+        }
+
+        // Fallback: open the dialog and attempt UI automation
         showOverlay('Opening token dialog…');
         link.click();
 
-        // Look for the purpose input directly — avoids depending on a specific
-        // dialog container selector which varies heavily across Canvas versions.
         const purposeInput = await waitFor(() => {
             const inp = document.querySelector(
-                '#access_token_purpose, ' +
-                'input[name="purpose"], ' +
-                'input[placeholder*="purpose" i], ' +
-                'input[id*="purpose" i], ' +
-                'input[aria-label*="purpose" i], ' +
-                '[data-testid*="purpose"] input'
+                '#access_token_purpose, input[name="purpose"], ' +
+                'input[placeholder*="purpose" i], input[id*="purpose" i], ' +
+                'input[aria-label*="purpose" i], [data-testid*="purpose"] input'
             );
             return (inp && inp.offsetParent !== null) ? inp : null;
         }, 8000);
 
         if (!purposeInput) {
-            showOverlay('Could not open the token dialog automatically.<br>Please click "+ New Access Token" manually.', true);
+            showOverlay('Could not open the token dialog.<br>Please click "+ New Access Token" and fill in the form manually.', true);
             return;
         }
 
-        purposeInput.focus();
-        purposeInput.value = 'Canvas Messenger';
-        purposeInput.dispatchEvent(new Event('input',  { bubbles: true }));
-        purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
-
-        // Scope all remaining lookups to the same dialog/form as the input
-        const container = purposeInput.closest(
-            'form, [role="dialog"], dialog, .ui-dialog, ' +
-            '.ReactModal__Content, .modal-content, .modal, .overlay'
-        ) || document.body;
-
-        // Fill expiry date + time — both required by Canvas.
-        // Canvas uses InstUI components (React-controlled inputs), so plain
-        // .value= assignment doesn't trigger React's internal state update.
-        // Use the native setter trick to force React to see the change.
-        function setReactValue(el, val) {
-            try {
-                const proto  = (el.tagName === 'SELECT')
-                    ? window.HTMLSelectElement.prototype
-                    : window.HTMLInputElement.prototype;
-                const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                if (setter) setter.call(el, val); else el.value = val;
-            } catch { el.value = val; }
+        const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        function setVal(el, v) {
+            try { if (nativeSet) nativeSet.call(el, v); else el.value = v; } catch { el.value = v; }
             el.dispatchEvent(new Event('input',  { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // Resolve a field by label text — works regardless of id/name attributes
-        function findByLabel(root, pattern) {
-            for (const lbl of root.querySelectorAll('label, [class*="label" i]')) {
-                if (!pattern.test(lbl.textContent)) continue;
-                const id = lbl.htmlFor || lbl.getAttribute('for');
-                if (id) {
-                    const el = root.querySelector(`[id="${CSS.escape(id)}"]`) || document.getElementById(id);
-                    if (el) return el;
-                }
-                const inp = lbl.querySelector('input, select') ||
-                    lbl.closest('[class*="formField" i], [class*="form-field" i], div')
-                        ?.querySelector('input, select');
-                if (inp) return inp;
-            }
-            return null;
-        }
-
-        // 119 days from now — safely within Canvas's 120-day maximum
-        const expDate = new Date(Date.now() + 119 * 864e5);
-        const expMo   = String(expDate.getMonth() + 1).padStart(2, '0');
-        const expDay  = String(expDate.getDate()).padStart(2, '0');
-        const expDateStr = `${expMo}/${expDay}/${expDate.getFullYear()}`; // MM/DD/YYYY
-
-        const expInput =
-            findByLabel(container, /expiration\s*date/i) ||
-            container.querySelector(
-                'input[name="expires_at"], input[id*="expir" i], ' +
-                'input[placeholder*="expir" i], input[aria-label*="expir" i], ' +
-                '[data-testid*="expir" i] input, [data-testid*="date" i] input'
-            );
-        if (expInput) setReactValue(expInput, expDateStr);
-
-        // Expiration time dropdown — pick the last option (latest, e.g. 11:59pm)
-        const timeSelect =
-            findByLabel(container, /expiration\s*time/i) ||
-            container.querySelector(
-                'select[name*="expir" i], select[id*="time" i], ' +
-                'select[aria-label*="time" i], [data-testid*="time" i] select'
-            ) ||
-            [...container.querySelectorAll('select')].find(s =>
-                /expir|time/i.test((s.name || '') + (s.id || '') + (s.getAttribute('aria-label') || ''))
-            );
-        if (timeSelect?.options?.length) {
-            setReactValue(timeSelect, timeSelect.options[timeSelect.options.length - 1].value);
-        }
-
+        setVal(purposeInput, 'Canvas Messenger');
         updateOverlay('Generating token…');
+
+        const container = purposeInput.closest(
+            'form, [role="dialog"], dialog, .ui-dialog, .ReactModal__Content, .modal-content'
+        ) || document.body;
 
         const submitBtn =
             container.querySelector('button[type="submit"], input[type="submit"]') ||
             [...container.querySelectorAll('button')].find(b =>
                 /generate|create|submit|save/i.test(b.textContent.trim())
             );
-
         if (!submitBtn) {
             showOverlay('Could not find the Generate button — please click it manually.', true);
             return;
@@ -355,8 +307,68 @@
             showOverlay('Could not capture the token — please copy it and paste into extension settings.', true);
             return;
         }
-
         showConfirmation(token);
+    }
+
+    // ── Direct API token creation ─────────────────────────────────────────
+    async function tryCreateTokenViaAPI() {
+        try {
+            // Canvas embeds the CSRF token in every page
+            const csrf =
+                document.querySelector('meta[name="csrf-token"]')?.content ||
+                window.ENV?.AUTHENTICITY_TOKEN;
+            if (!csrf) return null;
+
+            // Delete any existing "Canvas Messenger" tokens first so we don't
+            // accumulate duplicates across regenerations
+            await deleteExistingTokensViaAPI(csrf);
+
+            // 119 days — within Canvas's 120-day maximum
+            const expires = new Date(Date.now() + 119 * 864e5).toISOString();
+
+            const resp = await fetch('/api/v1/users/self/access_tokens', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept':       'application/json',
+                    'X-CSRF-Token': csrf,
+                },
+                body: JSON.stringify({
+                    access_token: {
+                        purpose:    'Canvas Messenger',
+                        expires_at: expires,
+                    },
+                }),
+            });
+
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            // Canvas returns the full token only on creation
+            return data.token || data.visible_token || data.full_token || null;
+        } catch {
+            return null;
+        }
+    }
+
+    async function deleteExistingTokensViaAPI(csrf) {
+        try {
+            const resp = await fetch('/api/v1/users/self/access_tokens?per_page=50', {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf },
+            });
+            if (!resp.ok) return;
+            const tokens = await resp.json();
+            const userId = window.ENV?.current_user_id || 'self';
+            for (const t of tokens) {
+                if (!/canvas\s*messenger/i.test(t.purpose || '')) continue;
+                await fetch(`/api/v1/users/${userId}/access_tokens/${t.id}`, {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRF-Token': csrf },
+                });
+            }
+        } catch { /* best-effort */ }
     }
 
     async function waitForToken(timeout) {
