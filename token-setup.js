@@ -268,13 +268,33 @@
         purposeInput.dispatchEvent(new Event('input',  { bubbles: true }));
         purposeInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-        updateOverlay('Generating token…');
-
-        // Scope submit button search to the same dialog/form as the input
+        // Scope all remaining lookups to the same dialog/form as the input
         const container = purposeInput.closest(
             'form, [role="dialog"], dialog, .ui-dialog, ' +
             '.ReactModal__Content, .modal-content, .modal, .overlay'
         ) || document.body;
+
+        // Fill expiry date — some Canvas instances require it; set 1 year ahead
+        const expInput = container.querySelector(
+            'input[name="expires_at"], input[type="date"], ' +
+            'input[placeholder*="expir" i], input[id*="expir" i], ' +
+            'input[aria-label*="expir" i], [data-testid*="expir"] input'
+        );
+        if (expInput) {
+            const d = new Date();
+            d.setFullYear(d.getFullYear() + 1);
+            if (expInput.type === 'date') {
+                expInput.value = d.toISOString().split('T')[0];          // YYYY-MM-DD
+            } else {
+                const mo  = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                expInput.value = `${mo}/${day}/${d.getFullYear()}`;      // MM/DD/YYYY text field
+            }
+            expInput.dispatchEvent(new Event('input',  { bubbles: true }));
+            expInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        updateOverlay('Generating token…');
 
         const submitBtn =
             container.querySelector('button[type="submit"], input[type="submit"]') ||
@@ -311,18 +331,35 @@
     }
 
     function extractToken() {
-        const candidates = [
-            ...document.querySelectorAll('input[type=text], input[type=password], code, pre, textarea'),
-        ];
-        for (const el of candidates) {
+        const TOKEN_RE = /^[a-zA-Z0-9~_\-]{20,}$/;
+
+        // Input/code elements first (most reliable)
+        for (const el of document.querySelectorAll(
+            'input[type=text], input[type=password], input[readonly], code, pre, textarea'
+        )) {
             const val = (el.value || el.textContent || '').trim();
-            if (/^[a-zA-Z0-9~_\-]{20,}$/.test(val)) return val;
+            if (TOKEN_RE.test(val)) return val;
         }
-        const alerts = document.querySelectorAll('[role="alert"], .alert, .flash-message, .ReactModalPortal');
-        for (const el of alerts) {
+
+        // Leaf nodes inside any visible dialog — Canvas sometimes renders
+        // the generated token inside a <span> or <p> in a success modal
+        for (const el of document.querySelectorAll(
+            '[role="dialog"] *, dialog *, .ui-dialog *, .ReactModal__Content *, ' +
+            '.modal-content *, [data-testid*="token"] *'
+        )) {
+            if (el.children.length > 0) continue;          // skip containers
+            const val = (el.textContent || '').trim();
+            if (TOKEN_RE.test(val)) return val;
+        }
+
+        // Alerts / flash messages — some Canvas versions announce the token here
+        for (const el of document.querySelectorAll(
+            '[role="alert"], .alert, .flash-message, .ReactModalPortal'
+        )) {
             const m = el.textContent.match(/[a-zA-Z0-9~_\-]{20,}/);
             if (m) return m[0];
         }
+
         return null;
     }
 
