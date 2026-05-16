@@ -694,3 +694,18 @@
 }
 .cm-btn-secondary:hover { background: rgba(237,66,69,0.15); }
 
+
+
+/* ── Contact not-found notice in compose ─────────────────────────────────── */
+.cm-contact-notfound {
+    background: rgba(250, 166, 26, 0.1);
+    border: 1px solid rgba(250, 166, 26, 0.35);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #dcddde;
+    line-height: 1.5;
+}
+.cm-contact-notfound strong { color: #faa61a; }
+.cm-contact-notfound a { color: #5865f2; text-decoration: none; }
+.cm-contact-notfound a:hover { text-decoration: underline; }
