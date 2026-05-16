@@ -29,6 +29,7 @@ const API = {
     getSettings:      ()              => API.send('getSettings'),
     getCurrentUser:   ()              => API.send('getCurrentUser'),
     updateBadge:      ()              => API.send('updateBadge'),
+    initCall:         (peerId, peerName, fromName) => API.send('initCall', { peerId, peerName, fromName }),
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ class CanvasMessenger {
         this.courses = [];
         this.searchDebounce = null;
 
+        this.pendingSnippet = null;
         this.root.innerHTML = '';
         this.render();
     }
@@ -290,6 +292,7 @@ class CanvasMessenger {
     renderConversation(conv, subject, withName) {
         const messages = conv.messages || [];
         const participants = conv.participants || [];
+        const peer = participants.find(p => p.id !== (this.currentUser && this.currentUser.id));
 
         const participantMap = {};
         for (const p of participants) participantMap[p.id] = p;
@@ -330,13 +333,25 @@ class CanvasMessenger {
                     <div class="cm-main-title">${escHtml(subject || '(no subject)')}</div>
                     <div class="cm-main-subtitle">with ${escHtml(withName)}</div>
                 </div>
+                ${peer ? `<button class="cm-icon-btn cm-call-btn" id="cm-call-btn" title="Start video call">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/>
+                    </svg>
+                </button>` : ''}
             </div>
             <div class="cm-messages" id="cm-messages">
                 ${messagesHtml || '<div class="cm-empty">No messages yet</div>'}
             </div>
             <div class="cm-input-area">
+                <div id="cm-snippet-preview-wrap"></div>
                 <div class="cm-input-box">
                     <textarea id="cm-reply-box" placeholder="Message ${escHtml(withName)}…" rows="1"></textarea>
+                    <button class="cm-icon-btn cm-snippet-btn" id="cm-snippet-btn" title="Send screenshot">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+                            <polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                    </button>
                     <button class="cm-send-btn" id="cm-send-btn" title="Send">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
@@ -364,15 +379,30 @@ class CanvasMessenger {
         sendBtn.addEventListener('click', () => {
             this.doReply(conv.id, textarea, msgContainer, participants);
         });
+
+        this.$main.querySelector('#cm-call-btn')?.addEventListener('click', () => {
+            if (!peer) return;
+            const fromName = this.currentUser?.name || 'Canvas User';
+            API.initCall(String(peer.id), peer.name, fromName);
+        });
+
+        this.$main.querySelector('#cm-snippet-btn')?.addEventListener('click', () => {
+            this.doSnippet(conv.id, msgContainer, textarea);
+        });
     }
 
     async doReply(convId, textarea, msgContainer, participants) {
         const body = textarea.value.trim();
-        if (!body) return;
+        const snippetDataUrl = this.pendingSnippet;
+        if (!body && !snippetDataUrl) return;
+
+        this.pendingSnippet = null;
+        const previewWrap = this.$main.querySelector('#cm-snippet-preview-wrap');
+        if (previewWrap) previewWrap.innerHTML = '';
+
         textarea.value = '';
         autoResize(textarea);
 
-        // Optimistic append
         const myName = this.currentUser ? this.currentUser.name : 'Me';
         const bubble = document.createElement('div');
         bubble.className = 'cm-msg-group';
@@ -385,17 +415,53 @@ class CanvasMessenger {
                     <span class="cm-msg-author" style="color:#5865f2">${escHtml(myName)}</span>
                     <span class="cm-msg-timestamp">Just now</span>
                 </div>
-                <div class="cm-msg-bubble">${escHtml(body)}</div>
+                <div class="cm-msg-bubble">${escHtml(body)}${snippetDataUrl ? '<br><em style="color:#87898c;font-size:12px">&#128247; Screenshot attached</em>' : ''}</div>
             </div>`;
         msgContainer.appendChild(bubble);
         msgContainer.scrollTop = msgContainer.scrollHeight;
 
         try {
-            await API.sendReply(convId, body);
+            if (snippetDataUrl) {
+                const res = await new Promise(r => chrome.runtime.sendMessage(
+                    { action: 'uploadFile', dataUrl: snippetDataUrl, filename: 'screenshot.png' }, r));
+                if (res?.error) throw new Error(res.error);
+                await new Promise(r => chrome.runtime.sendMessage(
+                    { action: 'sendReplyWithAttachment', convId, body: body || ' ', attachmentIds: [res.fileId] }, r));
+            } else {
+                await API.sendReply(convId, body);
+            }
             this.loadConversations();
         } catch (e) {
             bubble.style.opacity = '0.4';
             bubble.title = 'Failed to send: ' + e.message;
+        }
+    }
+
+    async doSnippet(convId, msgContainer, textarea) {
+        const btn = this.$main.querySelector('#cm-snippet-btn');
+        if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+        try {
+            const result = await new Promise(r => chrome.runtime.sendMessage({ action: 'captureTab' }, r));
+            if (!result?.dataUrl) throw new Error('Screenshot unavailable');
+            this.pendingSnippet = result.dataUrl;
+
+            const wrap = this.$main.querySelector('#cm-snippet-preview-wrap');
+            if (wrap) {
+                wrap.innerHTML = `
+                    <div class="cm-snippet-preview">
+                        <img src="${result.dataUrl}" class="cm-snippet-thumb" alt="Screenshot" />
+                        <button class="cm-snippet-remove" id="cm-snippet-remove" title="Remove">×</button>
+                    </div>`;
+                wrap.querySelector('#cm-snippet-remove').addEventListener('click', () => {
+                    this.pendingSnippet = null;
+                    wrap.innerHTML = '';
+                });
+            }
+            textarea?.focus();
+        } catch (e) {
+            console.error('[CM] snippet:', e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.style.opacity = ''; }
         }
     }
 

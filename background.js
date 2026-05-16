@@ -1,3 +1,40 @@
+// ── Signaling WebSocket (kept alive via alarms) ───────────────────────────────
+
+const SIGNALING_URL = 'wss://signaling.hackatoa.com';
+let sigWs = null;
+
+function connectSignaling() {
+    if (sigWs && (sigWs.readyState === WebSocket.OPEN || sigWs.readyState === WebSocket.CONNECTING)) return;
+    try {
+        sigWs = new WebSocket(SIGNALING_URL);
+
+        sigWs.onopen = async () => {
+            const { currentUser } = await getSettings();
+            if (currentUser?.id) {
+                sigWs.send(JSON.stringify({ type: 'register', userId: String(currentUser.id), name: currentUser.name || '' }));
+            }
+        };
+
+        sigWs.onmessage = async (e) => {
+            let msg;
+            try { msg = JSON.parse(e.data); } catch { return; }
+            if (msg.type === 'incoming-call' || msg.type === 'call-failed') {
+                // Broadcast to all active Canvas tabs
+                const tabs = await chrome.tabs.query({ url: ['https://*/*', 'http://*/*'] });
+                for (const tab of tabs) {
+                    chrome.tabs.sendMessage(tab.id, { action: 'cm-call-event', payload: msg }).catch(() => {});
+                }
+            }
+        };
+
+        sigWs.onerror = () => {};
+        sigWs.onclose = () => { sigWs = null; };
+    } catch {}
+}
+
+// Reconnect signaling on every badge poll
+const _origUpdateBadge = typeof updateBadge !== 'undefined' ? updateBadge : null;
+
 // ── Settings ─────────────────────────────────────────────────────────────────
 
 async function getSettings() {
@@ -129,6 +166,67 @@ async function getCurrentUser() {
     return canvasFetch('/users/self');
 }
 
+// ── File upload → Canvas ──────────────────────────────────────────────────────
+
+async function uploadCanvasFile(base64Data, filename = 'screenshot.png', contentType = 'image/png') {
+    const { canvasUrl, apiToken } = await getSettings();
+    if (!canvasUrl || !apiToken) throw new Error('NOT_CONFIGURED');
+
+    // Convert base64 data URL to blob bytes
+    const base64 = base64Data.replace(/^data:[^;]+;base64,/, '');
+    const bytes   = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    const size    = bytes.length;
+
+    // Step 1: initiate upload
+    const initRes = await fetch(`${canvasUrl}/api/v1/users/self/files`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: filename, size, content_type: contentType, parent_folder_path: '/Canvas Messenger' }),
+    });
+    if (!initRes.ok) throw new Error(`Upload init failed: ${initRes.status}`);
+    const { upload_url, upload_params } = await initRes.json();
+
+    // Step 2: multipart POST to upload_url
+    const form = new FormData();
+    for (const [k, v] of Object.entries(upload_params || {})) form.append(k, v);
+    form.append('file', new Blob([bytes], { type: contentType }), filename);
+
+    const uploadRes = await fetch(upload_url, { method: 'POST', body: form });
+    if (!uploadRes.ok && uploadRes.status !== 301) throw new Error(`Upload failed: ${uploadRes.status}`);
+
+    // Canvas may redirect to the file confirmation endpoint
+    const fileData = await uploadRes.json();
+    return fileData.id || fileData.file_id || fileData['id'];
+}
+
+async function sendReplyWithAttachment(convId, body, attachmentIds) {
+    return canvasFetch(`/conversations/${convId}/add_message`, {
+        method: 'POST',
+        body: JSON.stringify({ body: body || ' ', attachment_ids: attachmentIds }),
+    });
+}
+
+// ── Video call ────────────────────────────────────────────────────────────────
+
+async function openCallWindow(peerId, peerName, isInitiator) {
+    const url = chrome.runtime.getURL(`call.html?peerId=${encodeURIComponent(peerId)}&peerName=${encodeURIComponent(peerName)}&initiator=${isInitiator}`);
+    await chrome.windows.create({ url, type: 'popup', width: 720, height: 500 });
+}
+
+async function signalingRequest(msg) {
+    if (!sigWs || sigWs.readyState !== WebSocket.OPEN) {
+        connectSignaling();
+        // Wait up to 2s for connection
+        await new Promise((resolve) => {
+            const t = setTimeout(resolve, 2000);
+            const check = setInterval(() => {
+                if (sigWs?.readyState === WebSocket.OPEN) { clearInterval(check); clearTimeout(t); resolve(); }
+            }, 100);
+        });
+    }
+    if (sigWs?.readyState === WebSocket.OPEN) sigWs.send(JSON.stringify(msg));
+}
+
 // ── Badge / polling ───────────────────────────────────────────────────────────
 
 async function updateBadge() {
@@ -144,7 +242,7 @@ async function updateBadge() {
 
 chrome.alarms.create('poll', { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener(alarm => {
-    if (alarm.name === 'poll') updateBadge();
+    if (alarm.name === 'poll') { updateBadge(); connectSignaling(); }
 });
 
 // ── Message routing ───────────────────────────────────────────────────────────
@@ -174,6 +272,12 @@ async function handleMessage(msg, sender = {}) {
         case 'getCurrentUser':     return getCurrentUser();
         case 'updateBadge':        return updateBadge();
         case 'openSettings':       chrome.runtime.openOptionsPage(); return { ok: true };
+        case 'initCall':           await signalingRequest({ type: 'call-request', to: msg.peerId, fromName: msg.fromName }); return openCallWindow(msg.peerId, msg.peerName, true);
+        case 'acceptCall':         await openCallWindow(msg.peerId, msg.peerName, false); return { ok: true };
+        case 'declineCall':        await signalingRequest({ type: 'call-declined', to: msg.peerId }); return { ok: true };
+        case 'captureTab':         return new Promise(resolve => chrome.tabs.captureVisibleTab(null, { format: 'png' }, dataUrl => resolve({ dataUrl: dataUrl || null })));
+        case 'uploadFile':         return { fileId: await uploadCanvasFile(msg.dataUrl, msg.filename) };
+        case 'sendReplyWithAttachment': return sendReplyWithAttachment(msg.convId, msg.body, msg.attachmentIds);
         case 'setPageValue': {
             // Runs in the page's MAIN world — bypasses Canvas CSP.
             // Uses _valueTracker trick to make React 16-18 detect the change,
@@ -243,3 +347,5 @@ chrome.action.onClicked.addListener(tab => {
 
 // initial badge on load
 updateBadge();
+connectSignaling();
+

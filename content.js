@@ -170,6 +170,7 @@
 
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.action === 'toggleSidebar') { togglePanel(); sendResponse({ ok: true }); }
+        if (msg.action === 'cm-call-event') { showCallToast(msg.payload); sendResponse({ ok: true }); }
     });
 
     document.addEventListener('keydown', e => {
@@ -413,6 +414,85 @@
             <small style="font-size:11px">${err.message}</small>`;
     }
 
+    // ── Incoming call toast ───────────────────────────────────────────────
+    function showCallToast(payload) {
+        document.getElementById('cm-call-toast')?.remove();
+
+        if (!document.getElementById('cm-toast-style')) {
+            const s = document.createElement('style');
+            s.id = 'cm-toast-style';
+            s.textContent = '@keyframes cm-toast-in{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}';
+            document.head.appendChild(s);
+        }
+
+        const esc = str => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const ini = name => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+        const toast = document.createElement('div');
+        toast.id = 'cm-call-toast';
+        Object.assign(toast.style, {
+            position: 'fixed', bottom: '80px', right: '24px',
+            background: '#2b2d31', border: '1px solid #404249',
+            borderRadius: '12px', padding: '14px 16px',
+            zIndex: '100002', boxShadow: '0 8px 32px rgba(0,0,0,0.65)',
+            display: 'flex', flexDirection: 'column', gap: '12px',
+            minWidth: '250px', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+            animation: 'cm-toast-in 0.25s ease',
+        });
+
+        const peerName = payload.fromName || 'Canvas User';
+        const peerId   = payload.from;
+
+        if (payload.type === 'incoming-call') {
+            toast.innerHTML = `
+                <div style="display:flex;align-items:center;gap:12px">
+                    <div style="width:42px;height:42px;border-radius:50%;background:#5865f2;color:#fff;
+                        font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        ${esc(ini(peerName))}
+                    </div>
+                    <div>
+                        <div style="font-size:14px;font-weight:600;color:#f2f3f5">${esc(peerName)}</div>
+                        <div style="font-size:11px;color:#57f287;font-weight:600;margin-top:2px">&#128249; Incoming video call</div>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button id="cm-toast-decline"
+                        style="flex:1;padding:8px;border:none;border-radius:6px;background:#ed4245;color:#fff;
+                               font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
+                        Decline
+                    </button>
+                    <button id="cm-toast-accept"
+                        style="flex:1;padding:8px;border:none;border-radius:6px;background:#57f287;color:#111;
+                               font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">
+                        Accept
+                    </button>
+                </div>`;
+
+            const timer = setTimeout(() => toast.remove(), 30000);
+
+            toast.querySelector('#cm-toast-decline').addEventListener('click', () => {
+                chrome.runtime.sendMessage({ action: 'declineCall', peerId });
+                toast.remove(); clearTimeout(timer);
+            });
+            toast.querySelector('#cm-toast-accept').addEventListener('click', () => {
+                chrome.runtime.sendMessage({ action: 'acceptCall', peerId, peerName });
+                toast.remove(); clearTimeout(timer);
+            });
+        } else {
+            toast.innerHTML = `
+                <div style="display:flex;align-items:center;gap:12px">
+                    <div style="font-size:26px;line-height:1">&#128277;</div>
+                    <div>
+                        <div style="font-size:13px;font-weight:600;color:#f2f3f5">${esc(peerName)} unavailable</div>
+                        <div style="font-size:11px;color:#87898c;margin-top:2px">The call could not connect</div>
+                    </div>
+                </div>`;
+            setTimeout(() => toast.remove(), 5000);
+        }
+
+        document.body.appendChild(toast);
+    }
+
     // ── Unread badge ──────────────────────────────────────────────────────
     async function updateBadge() {
         try {
@@ -449,3 +529,4 @@
     updateBadge();
     setInterval(updateBadge, 60000);
 })();
+

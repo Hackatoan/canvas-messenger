@@ -679,6 +679,59 @@
 .cm-contact-detail-value a { color: #5865f2; text-decoration: none; }
 .cm-contact-detail-value a:hover { text-decoration: underline; }
 
+/* ── Video call button ───────────────────────────────────────────────────── */
+.cm-call-btn {
+    margin-left: auto;
+    width: 34px;
+    height: 34px;
+    background: rgba(87,242,135,0.08) !important;
+    color: #57f287 !important;
+    border: 1px solid rgba(87,242,135,0.2) !important;
+    border-radius: 6px !important;
+    flex-shrink: 0;
+}
+.cm-call-btn:hover {
+    background: rgba(87,242,135,0.2) !important;
+    color: #57f287 !important;
+}
+
+/* ── Screenshot snippet ──────────────────────────────────────────────────── */
+.cm-snippet-preview {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 16px 4px;
+}
+
+.cm-snippet-thumb {
+    max-height: 80px;
+    max-width: 220px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #404249;
+    display: block;
+}
+
+.cm-snippet-remove {
+    background: rgba(237,66,69,0.1);
+    border: 1px solid rgba(237,66,69,0.25);
+    color: #ed4245;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 7px;
+    line-height: 1.6;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+.cm-snippet-remove:hover { background: rgba(237,66,69,0.25); }
+
+.cm-snippet-btn {
+    flex-shrink: 0;
+    color: #87898c;
+}
+.cm-snippet-btn:hover { color: #5865f2 !important; }
+
 /* Secondary button (delete in contact form) */
 .cm-btn-secondary {
     background: none;

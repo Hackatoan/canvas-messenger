@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Canvas Messenger",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Discord-style messaging for Canvas \u2014 chat with students and professors directly.",
   "permissions": [
     "storage",
     "alarms",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://*/*",
@@ -46,7 +47,9 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "styles/messenger.css"
+        "styles/messenger.css",
+        "call.html",
+        "call.js"
       ],
       "matches": [
         "<all_urls>"

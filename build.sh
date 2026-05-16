@@ -6,6 +6,8 @@ SRC_FILES=(
     background.js
     content.js
     token-setup.js
+    call.html
+    call.js
     styles/messenger.js
     styles/messenger.css
     popup/popup.html
