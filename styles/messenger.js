@@ -767,6 +767,22 @@ class CanvasMessenger {
 
         this.setupRecipientInput();
 
+        if (this.composeNotFound) {
+            const c = this.composeNotFound;
+            this.composeNotFound = null;
+            const notice = document.createElement('div');
+            notice.className = 'cm-contact-notfound';
+            notice.innerHTML = `<strong>${escHtml(c.name)}</strong> isn't in any of your current Canvas courses — Canvas can only find people you share a course with. Try searching by their full name below${c.email ? `, or <a href="mailto:${escHtml(c.email)}">email them directly</a>` : ''}.`;
+            const body = this.$main.querySelector('.cm-compose-body');
+            body.insertBefore(notice, body.firstChild);
+            const input = this.$main.querySelector('.cm-recipient-input');
+            if (input) {
+                input.value = c.name;
+                input.dispatchEvent(new Event('input'));
+                input.focus();
+            }
+        }
+
         this.$main.querySelector('#cm-send-new-btn').addEventListener('click', () => this.doSendNew());
     }
 
@@ -1014,6 +1030,9 @@ class CanvasMessenger {
 
         if (found.length) {
             this.recipients = [{ id: String(found[0].id), name: found[0].name || found[0].full_name }];
+            this.composeNotFound = null;
+        } else {
+            this.composeNotFound = contact;
         }
 
         this.courses.length || await API.getCourses().then(c => { this.courses = c; }).catch(() => {});
@@ -1102,4 +1121,5 @@ class CanvasMessenger {
 // Expose as a window global so content.js can reach it regardless of
 // how Firefox wraps the content-script module environment.
 window.CanvasMessenger = CanvasMessenger;
+
 
