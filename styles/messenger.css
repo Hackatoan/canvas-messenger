@@ -679,6 +679,53 @@
 .cm-contact-detail-value a { color: #5865f2; text-decoration: none; }
 .cm-contact-detail-value a:hover { text-decoration: underline; }
 
+/* ── Connect tab (Cross-campus relay) ────────────────────────────────────── */
+.cm-tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+.cm-tabs::-webkit-scrollbar { display: none; }
+.cm-tab { flex: none; font-size: 11px; }
+
+.cm-relay-setup-intro {
+    background: rgba(88,101,242,0.1);
+    border: 1px solid rgba(88,101,242,0.25);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: #b5bac1;
+    line-height: 1.5;
+}
+.cm-relay-setup-intro strong { color: #f2f3f5; }
+
+.cm-relay-myid {
+    padding: 4px 8px 6px;
+    font-size: 10px;
+    cursor: pointer;
+    color: #87898c;
+    border-bottom: 1px solid #1e1f22;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cm-relay-myid-box {
+    background: #1e1f22;
+    border-radius: 6px;
+    padding: 10px 14px;
+}
+.cm-relay-myid-label { font-size: 10px; font-weight: 700; color: #87898c; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.cm-relay-myid-value {
+    font-size: 12px; color: #dcddde; font-family: monospace;
+    word-break: break-all; cursor: pointer;
+}
+.cm-relay-myid-value:hover { color: #5865f2; }
+
+.cm-relay-subtitle { color: #57f287 !important; font-size: 11px !important; }
+.cm-relay-lock { font-size: 10px; opacity: 0.6; margin-left: 2px; }
+
+.cm-relay-invite-header-btn { margin-left: auto; }
+
+.cm-relay-result { position: relative; }
+
 /* ── Video call button ───────────────────────────────────────────────────── */
 .cm-call-btn {
     margin-left: auto;
@@ -747,18 +794,3 @@
 }
 .cm-btn-secondary:hover { background: rgba(237,66,69,0.15); }
 
-
-
-/* ── Contact not-found notice in compose ─────────────────────────────────── */
-.cm-contact-notfound {
-    background: rgba(250, 166, 26, 0.1);
-    border: 1px solid rgba(250, 166, 26, 0.35);
-    border-radius: 4px;
-    padding: 10px 12px;
-    font-size: 13px;
-    color: #dcddde;
-    line-height: 1.5;
-}
-.cm-contact-notfound strong { color: #faa61a; }
-.cm-contact-notfound a { color: #5865f2; text-decoration: none; }
-.cm-contact-notfound a:hover { text-decoration: underline; }

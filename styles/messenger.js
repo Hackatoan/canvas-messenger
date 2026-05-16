@@ -171,6 +171,7 @@ class CanvasMessenger {
                         <button class="cm-tab" data-tab="classes">Classes</button>
                         <button class="cm-tab" data-tab="groups">Groups</button>
                         <button class="cm-tab" data-tab="contacts">Contacts</button>
+                        <button class="cm-tab" data-tab="connect">Connect</button>
                     </div>
                     <div class="cm-conv-list" id="cm-conv-list">
                         <div class="cm-loading"><div class="cm-spinner"></div></div>
@@ -205,6 +206,9 @@ class CanvasMessenger {
                 } else if (this.tab === 'contacts') {
                     this.stopClassChatPoll();
                     this.loadContacts();
+                } else if (this.tab === 'connect') {
+                    this.stopClassChatPoll();
+                    this.loadRelayTab();
                 } else {
                     this.stopClassChatPoll();
                     this.loadConversations();
@@ -1181,6 +1185,378 @@ class CanvasMessenger {
         const data = await new Promise(r => chrome.storage.local.get('cmContacts', r));
         const contacts = (data.cmContacts || []).filter(c => c.id !== id);
         await new Promise(r => chrome.storage.local.set({ cmContacts: contacts }, r));
+    }
+
+    // ── Cross-campus relay (Connect tab) ───────────────────────────────────
+
+    async loadRelayTab() {
+        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this._removeRelayListener();
+
+        const profile = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetProfile' }, r));
+        if (!profile) { this.renderRelaySetup(); return; }
+
+        const threads = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetThreads' }, r)) || [];
+        this.renderRelayThreadList(threads, profile);
+
+        if (!threads.length) {
+            this.$main.innerHTML = `
+                <div class="cm-placeholder">
+                    <div class="cm-placeholder-icon">🌐</div>
+                    <h2>Cross-Campus Connect</h2>
+                    <p>Message anyone with Canvas Messenger installed — across any school. End-to-end encrypted.</p>
+                    <button class="cm-btn-primary" id="cm-relay-find-btn" style="margin-top:12px">Find or Add Contact</button>
+                </div>`;
+            this.$main.querySelector('#cm-relay-find-btn').addEventListener('click', () => this.renderRelaySearch(profile));
+        }
+    }
+
+    renderRelaySetup() {
+        this.$convList.innerHTML = '';
+        this.$main.innerHTML = `
+            <div class="cm-compose">
+                <div class="cm-compose-header"><h2>Cross-Campus Connect</h2></div>
+                <div class="cm-compose-body">
+                    <div class="cm-relay-setup-intro">
+                        🔒 Create a free account to message anyone with Canvas Messenger, even across different schools.
+                        Messages are <strong>end-to-end encrypted</strong> — only you and your contact can read them.
+                    </div>
+                    <div class="cm-field">
+                        <label>Display Name</label>
+                        <input type="text" id="cm-relay-name" placeholder="Your full name…" />
+                    </div>
+                    <div class="cm-field">
+                        <label>School Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional — helps others find you)</span></label>
+                        <input type="email" id="cm-relay-email" placeholder="you@school.edu" />
+                    </div>
+                </div>
+                <div class="cm-compose-footer">
+                    <button class="cm-btn-primary" id="cm-relay-register-btn">Create Account</button>
+                </div>
+            </div>`;
+
+        new Promise(r => chrome.runtime.sendMessage({ action: 'getSettings' }, r)).then(s => {
+            if (s?.currentUser?.name)     this.$main.querySelector('#cm-relay-name').value = s.currentUser.name;
+            if (s?.currentUser?.login_id) this.$main.querySelector('#cm-relay-email').value = s.currentUser.login_id;
+        }).catch(() => {});
+
+        this.$main.querySelector('#cm-relay-register-btn').addEventListener('click', async () => {
+            const name  = this.$main.querySelector('#cm-relay-name').value.trim();
+            const email = this.$main.querySelector('#cm-relay-email').value.trim();
+            if (!name) { alert('Name is required.'); return; }
+            const btn = this.$main.querySelector('#cm-relay-register-btn');
+            btn.disabled = true; btn.textContent = 'Creating account…';
+            try {
+                await new Promise((resolve, reject) => chrome.runtime.sendMessage(
+                    { action: 'relayRegister', name, email }, r => r?.ok ? resolve(r) : reject(new Error(r?.error || 'Failed'))));
+                this.loadRelayTab();
+            } catch (e) {
+                btn.disabled = false; btn.textContent = 'Create Account';
+                alert('Registration failed: ' + e.message);
+            }
+        });
+    }
+
+    renderRelayThreadList(threads, profile) {
+        this.$convList.innerHTML = '';
+        const addBtn = document.createElement('button');
+        addBtn.className = 'cm-add-contact-btn';
+        addBtn.textContent = '+ Find or Add Contact';
+        addBtn.addEventListener('click', () => this.renderRelaySearch(profile));
+        this.$convList.appendChild(addBtn);
+
+        const myIdEl = document.createElement('div');
+        myIdEl.className = 'cm-relay-myid';
+        myIdEl.innerHTML = `<span style="color:#87898c;font-size:10px">Your ID: </span><span class="cm-relay-id-text">${escHtml(profile.id)}</span>`;
+        myIdEl.querySelector('.cm-relay-id-text').addEventListener('click', () => {
+            navigator.clipboard?.writeText(profile.id).catch(() => {});
+        });
+        this.$convList.appendChild(myIdEl);
+
+        const sorted = [...threads].sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
+        for (const thread of sorted) {
+            const el = document.createElement('div');
+            el.className = 'cm-conv-item' + (thread.unreadCount ? ' unread' : '');
+            el.innerHTML = `
+                <div class="cm-relay-av-slot"></div>
+                <div class="cm-conv-info">
+                    <div class="cm-conv-top">
+                        <span class="cm-conv-name">${escHtml(thread.contactName)}</span>
+                        <span class="cm-conv-time">${thread.lastAt ? relativeTime(thread.lastAt) : ''}</span>
+                    </div>
+                    <div class="cm-conv-preview">${escHtml(thread.lastMessage || '')}</div>
+                </div>
+                ${thread.unreadCount ? '<div class="cm-unread-dot"></div>' : ''}`;
+            el.querySelector('.cm-relay-av-slot').replaceWith(mkAvatar(thread.contactName));
+            el.addEventListener('click', async () => {
+                this.$convList.querySelectorAll('.cm-conv-item').forEach(i => i.classList.remove('active'));
+                el.classList.add('active');
+                el.classList.remove('unread');
+                el.querySelector('.cm-unread-dot')?.remove();
+                chrome.runtime.sendMessage({ action: 'relayMarkRead', threadId: thread.id });
+                this.openRelayThread(thread, profile);
+            });
+            this.$convList.appendChild(el);
+        }
+    }
+
+    async openRelayThread(thread, profile) {
+        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading…</div>';
+        this._removeRelayListener();
+        try {
+            const messages  = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetMessages', threadId: thread.id }, r)) || [];
+            const contacts  = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetContacts' }, r)) || [];
+            const contact   = contacts.find(c => c.id === thread.contactId) || { id: thread.contactId, name: thread.contactName };
+            this.renderRelayChat(thread, contact, messages, profile);
+        } catch (e) {
+            this.$main.innerHTML = `<div class="cm-error">${escHtml(e.message)}</div>`;
+        }
+    }
+
+    renderRelayChat(thread, contact, messages, profile) {
+        const renderMsg = m => {
+            const isMe = m.fromMe;
+            const name = isMe ? (profile.name || 'Me') : contact.name;
+            return `<div class="cm-msg-group" data-relay-id="${m.id}">
+                <div class="cm-msg-group-avatar">
+                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${initials(name)}</div>
+                </div>
+                <div class="cm-msg-group-body">
+                    <div class="cm-msg-group-header">
+                        <span class="cm-msg-author" style="color:${isMe ? '#5865f2' : '#f2f3f5'}">${escHtml(name)}</span>
+                        <span class="cm-msg-timestamp">${fullTime(m.sentAt)}</span>
+                        <span class="cm-relay-lock" title="End-to-end encrypted">🔒</span>
+                    </div>
+                    <div class="cm-msg-bubble">${escHtml(m.body)}</div>
+                </div>
+            </div>`;
+        };
+
+        this.$main.innerHTML = `
+            <div class="cm-main-header">
+                <div>
+                    <div class="cm-main-title">${escHtml(contact.name)}</div>
+                    <div class="cm-main-subtitle cm-relay-subtitle">🔒 End-to-end encrypted · Cross-campus</div>
+                </div>
+                <button class="cm-icon-btn cm-relay-invite-header-btn" id="cm-relay-invite-btn" title="Share invite link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="cm-messages" id="cm-relay-messages">
+                ${messages.map(renderMsg).join('') || '<div class="cm-empty">No messages yet — say hello!</div>'}
+            </div>
+            <div class="cm-input-area">
+                <div class="cm-input-box">
+                    <textarea id="cm-relay-input" placeholder="Message ${escHtml(contact.name)}… (encrypted)" rows="1"></textarea>
+                    <button class="cm-send-btn" id="cm-relay-send">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                    </button>
+                </div>
+            </div>`;
+
+        const msgEl   = this.$main.querySelector('#cm-relay-messages');
+        const textarea = this.$main.querySelector('#cm-relay-input');
+        const sendBtn  = this.$main.querySelector('#cm-relay-send');
+        msgEl.scrollTop = msgEl.scrollHeight;
+
+        textarea.addEventListener('input', () => {
+            autoResize(textarea);
+            sendBtn.classList.toggle('active', textarea.value.trim().length > 0);
+        });
+
+        const doSend = async () => {
+            const body = textarea.value.trim();
+            if (!body) return;
+            textarea.value = ''; autoResize(textarea); sendBtn.classList.remove('active');
+            const myName = profile.name || 'Me';
+            const bubble = document.createElement('div');
+            bubble.className = 'cm-msg-group';
+            bubble.innerHTML = `
+                <div class="cm-msg-group-avatar">
+                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${initials(myName)}</div>
+                </div>
+                <div class="cm-msg-group-body">
+                    <div class="cm-msg-group-header">
+                        <span class="cm-msg-author" style="color:#5865f2">${escHtml(myName)}</span>
+                        <span class="cm-msg-timestamp">Just now</span>
+                        <span class="cm-relay-lock" title="End-to-end encrypted">🔒</span>
+                    </div>
+                    <div class="cm-msg-bubble">${escHtml(body)}</div>
+                </div>`;
+            msgEl.appendChild(bubble); msgEl.scrollTop = msgEl.scrollHeight;
+            try {
+                await new Promise((resolve, reject) => chrome.runtime.sendMessage(
+                    { action: 'relaySendMessage', recipientId: contact.id, body },
+                    r => r?.ok ? resolve(r) : reject(new Error(r?.error || 'Send failed'))));
+            } catch (e) { bubble.style.opacity = '0.4'; bubble.title = 'Failed: ' + e.message; }
+        };
+        textarea.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+        sendBtn.addEventListener('click', doSend);
+
+        // Real-time: listen for new relay messages on this thread
+        this._relayListener = async (e) => {
+            if (e.detail.threadId !== thread.id) return;
+            // Reload and append new messages
+            const newMsgs = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetMessages', threadId: thread.id }, r)) || [];
+            for (const m of newMsgs) {
+                if (!msgEl.querySelector(`[data-relay-id="${m.id}"]`) && !m.fromMe) {
+                    msgEl.insertAdjacentHTML('beforeend', renderMsg(m));
+                    msgEl.scrollTop = msgEl.scrollHeight;
+                }
+            }
+        };
+        document.addEventListener('cm-relay-msg', this._relayListener);
+
+        // Invite share button
+        this.$main.querySelector('#cm-relay-invite-btn').addEventListener('click', async () => {
+            try {
+                const r = await new Promise(res => chrome.runtime.sendMessage({ action: 'relayCreateInvite' }, res));
+                if (r?.url) {
+                    await navigator.clipboard?.writeText(r.url).catch(() => {});
+                    const btn = this.$main.querySelector('#cm-relay-invite-btn');
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '<span style="font-size:11px;font-weight:600;color:#57f287">Copied!</span>';
+                    setTimeout(() => { btn.innerHTML = orig; }, 2000);
+                }
+            } catch {}
+        });
+    }
+
+    _removeRelayListener() {
+        if (this._relayListener) {
+            document.removeEventListener('cm-relay-msg', this._relayListener);
+            this._relayListener = null;
+        }
+    }
+
+    async renderRelaySearch(profile) {
+        if (!profile) {
+            profile = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetProfile' }, r));
+        }
+        if (!profile) { this.renderRelaySetup(); return; }
+
+        this.$main.innerHTML = `
+            <div class="cm-compose">
+                <div class="cm-compose-header">
+                    <button class="cm-icon-btn" id="cm-relay-search-back">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7-7-7 7 7 7"/></svg>
+                    </button>
+                    <h2>Find or Add Contact</h2>
+                </div>
+                <div class="cm-compose-body">
+                    <div class="cm-relay-myid-box">
+                        <div class="cm-relay-myid-label">Your Connect ID <span style="color:#87898c;font-size:10px">(click to copy)</span></div>
+                        <div class="cm-relay-myid-value" id="cm-relay-copy-id">${escHtml(profile.id)}</div>
+                    </div>
+                    <div class="cm-field">
+                        <label>Search by name or school email</label>
+                        <input type="text" id="cm-relay-search-q" placeholder="Type at least 2 characters…" autocomplete="off" />
+                        <div id="cm-relay-search-results" style="display:none" class="cm-search-results"></div>
+                    </div>
+                    <div class="cm-field">
+                        <label>Or paste an invite link / token</label>
+                        <div style="display:flex;gap:8px">
+                            <input type="text" id="cm-relay-invite-tok" placeholder="https://relay.hackatoa.com/invite/… or 32-char token"
+                                style="flex:1;background:#1e1f22;border:1px solid #1e1f22;border-radius:4px;color:#dcddde;font-size:13px;padding:8px 10px;outline:none;font-family:inherit;transition:border-color .15s" />
+                            <button class="cm-btn-primary" id="cm-relay-tok-go" style="padding:8px 14px;font-size:13px">Go</button>
+                        </div>
+                    </div>
+                    <div class="cm-field">
+                        <label>Or share your own invite link</label>
+                        <button class="cm-btn-primary" id="cm-relay-gen-invite" style="width:100%;background:#404249;font-size:13px">Generate &amp; Copy Invite Link</button>
+                    </div>
+                </div>
+            </div>`;
+
+        this.$main.querySelector('#cm-relay-search-back').addEventListener('click', () => this.loadRelayTab());
+        this.$main.querySelector('#cm-relay-copy-id').addEventListener('click', () => {
+            navigator.clipboard?.writeText(profile.id).catch(() => {});
+        });
+
+        let searchResultsData = {};
+        const searchInput   = this.$main.querySelector('#cm-relay-search-q');
+        const searchResults = this.$main.querySelector('#cm-relay-search-results');
+
+        let debounce;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(debounce);
+            const q = searchInput.value.trim();
+            if (q.length < 2) { searchResults.style.display = 'none'; return; }
+            debounce = setTimeout(async () => {
+                try {
+                    const users = await new Promise(r => chrome.runtime.sendMessage({ action: 'relaySearchUsers', query: q }, r));
+                    if (!Array.isArray(users) || !users.length) { searchResults.style.display = 'none'; return; }
+                    searchResultsData = {};
+                    users.forEach(u => { searchResultsData[u.id] = u; });
+                    searchResults.innerHTML = users.map(u => `
+                        <div class="cm-search-result cm-relay-result" data-uid="${escHtml(u.id)}">
+                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${initials(u.name)}</div>
+                            <div style="flex:1;min-width:0">
+                                <div class="cm-search-result-name">${escHtml(u.name)}</div>
+                                <div class="cm-search-result-type">${escHtml(u.email || '')}</div>
+                            </div>
+                            <button class="cm-btn-primary cm-relay-add-btn" style="font-size:11px;padding:4px 10px;flex-shrink:0">Add</button>
+                        </div>`).join('');
+                    searchResults.style.display = 'block';
+                    searchResults.querySelectorAll('.cm-relay-add-btn').forEach(btn => {
+                        btn.addEventListener('click', async () => {
+                            const uid = btn.closest('.cm-relay-result').dataset.uid;
+                            const u = searchResultsData[uid];
+                            if (!u) return;
+                            btn.disabled = true; btn.textContent = 'Adding…';
+                            await new Promise(r => chrome.runtime.sendMessage({ action: 'relayAddContact', contact: u }, r));
+                            this.loadRelayTab().then(() => {
+                                const threadId = [profile.id, u.id].sort().join('_');
+                                const thread = { id: threadId, contactId: u.id, contactName: u.name, lastMessage: '', lastAt: new Date().toISOString(), unreadCount: 0 };
+                                this.openRelayThread(thread, profile);
+                            });
+                        });
+                    });
+                } catch { searchResults.style.display = 'none'; }
+            }, 350);
+        });
+
+        // Invite token / URL resolution
+        this.$main.querySelector('#cm-relay-tok-go').addEventListener('click', async () => {
+            let tok = this.$main.querySelector('#cm-relay-invite-tok').value.trim();
+            const m = tok.match(/[0-9a-f]{32}/i);
+            if (m) tok = m[0];
+            if (!tok) return;
+            const btn = this.$main.querySelector('#cm-relay-tok-go');
+            btn.disabled = true; btn.textContent = 'Looking up…';
+            try {
+                const u = await new Promise((resolve, reject) => chrome.runtime.sendMessage(
+                    { action: 'relayResolveInvite', token: tok }, r => r?.error ? reject(new Error(r.error)) : resolve(r)));
+                await new Promise(r => chrome.runtime.sendMessage({ action: 'relayAddContact', contact: u }, r));
+                this.loadRelayTab().then(() => {
+                    const threadId = [profile.id, u.id].sort().join('_');
+                    const thread = { id: threadId, contactId: u.id, contactName: u.name, lastMessage: '', lastAt: new Date().toISOString(), unreadCount: 0 };
+                    this.openRelayThread(thread, profile);
+                });
+            } catch (e) {
+                btn.disabled = false; btn.textContent = 'Go';
+                alert('Could not resolve invite: ' + e.message);
+            }
+        });
+
+        // Generate invite
+        this.$main.querySelector('#cm-relay-gen-invite').addEventListener('click', async () => {
+            const btn = this.$main.querySelector('#cm-relay-gen-invite');
+            btn.disabled = true; btn.textContent = 'Generating…';
+            try {
+                const r = await new Promise(res => chrome.runtime.sendMessage({ action: 'relayCreateInvite' }, res));
+                await navigator.clipboard?.writeText(r.url).catch(() => {});
+                btn.textContent = '✓ Copied to clipboard!';
+                btn.style.background = '#57f287'; btn.style.color = '#111';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Generate & Copy Invite Link'; btn.style.background = ''; btn.style.color = ''; }, 3000);
+            } catch (e) {
+                btn.disabled = false; btn.textContent = 'Generate & Copy Invite Link';
+                alert('Failed: ' + e.message);
+            }
+        });
     }
 }
 

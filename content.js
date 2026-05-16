@@ -170,7 +170,8 @@
 
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.action === 'toggleSidebar') { togglePanel(); sendResponse({ ok: true }); }
-        if (msg.action === 'cm-call-event') { showCallToast(msg.payload); sendResponse({ ok: true }); }
+        if (msg.action === 'cm-call-event')  { showCallToast(msg.payload); sendResponse({ ok: true }); }
+        if (msg.action === 'relay-message')  { document.dispatchEvent(new CustomEvent('cm-relay-msg', { detail: msg.payload })); sendResponse({ ok: true }); }
     });
 
     document.addEventListener('keydown', e => {
