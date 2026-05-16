@@ -168,6 +168,7 @@ class CanvasMessenger {
                         <button class="cm-tab" data-tab="unread">Unread</button>
                         <button class="cm-tab" data-tab="classes">Classes</button>
                         <button class="cm-tab" data-tab="groups">Groups</button>
+                        <button class="cm-tab" data-tab="contacts">Contacts</button>
                     </div>
                     <div class="cm-conv-list" id="cm-conv-list">
                         <div class="cm-loading"><div class="cm-spinner"></div></div>
@@ -199,6 +200,9 @@ class CanvasMessenger {
                     this.loadGroups();
                 } else if (this.tab === 'classes') {
                     this.loadClasses();
+                } else if (this.tab === 'contacts') {
+                    this.stopClassChatPoll();
+                    this.loadContacts();
                 } else {
                     this.stopClassChatPoll();
                     this.loadConversations();
@@ -880,8 +884,222 @@ class CanvasMessenger {
             this.$main.querySelector('.cm-compose-body').prepend(err);
         }
     }
+
+    // ── Contacts tab ───────────────────────────────────────────────────────
+
+    async loadContacts() {
+        this.$convList.innerHTML = '';
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'cm-add-contact-btn';
+        addBtn.textContent = '+ Add Contact';
+        addBtn.addEventListener('click', () => this.renderContactForm());
+        this.$convList.appendChild(addBtn);
+
+        const data = await new Promise(r => chrome.storage.local.get('cmContacts', r));
+        const contacts = data.cmContacts || [];
+
+        if (!contacts.length) {
+            const empty = document.createElement('div');
+            empty.className = 'cm-empty';
+            empty.textContent = 'No saved contacts yet';
+            this.$convList.appendChild(empty);
+            this.$main.innerHTML = `
+                <div class="cm-placeholder">
+                    <div class="cm-placeholder-icon">👥</div>
+                    <h2>Contacts</h2>
+                    <p>Save emails for students you no longer share a class with.</p>
+                </div>`;
+            return;
+        }
+
+        for (const contact of contacts) {
+            this.$convList.appendChild(this.mkContactItem(contact));
+        }
+    }
+
+    mkContactItem(contact) {
+        const el = document.createElement('div');
+        el.className = 'cm-conv-item cm-contact-item';
+        el.innerHTML = `
+            <div class="cm-contact-avatar-slot"></div>
+            <div class="cm-conv-info">
+                <div class="cm-conv-top">
+                    <span class="cm-conv-name">${escHtml(contact.name)}</span>
+                </div>
+                ${contact.email ? `<div class="cm-conv-preview">${escHtml(contact.email)}</div>` : ''}
+                ${contact.notes ? `<div class="cm-conv-preview cm-contact-notes">${escHtml(contact.notes)}</div>` : ''}
+            </div>
+            <div class="cm-contact-actions">
+                <button class="cm-icon-btn cm-contact-edit-btn" title="Edit">✏</button>
+                <button class="cm-icon-btn cm-contact-del-btn" title="Delete">✕</button>
+            </div>`;
+
+        el.querySelector('.cm-contact-avatar-slot').replaceWith(mkAvatar(contact.name));
+
+        el.addEventListener('click', e => {
+            if (e.target.closest('.cm-contact-actions')) return;
+            this.$convList.querySelectorAll('.cm-conv-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            this.renderContactDetail(contact);
+        });
+
+        el.querySelector('.cm-contact-edit-btn').addEventListener('click', e => {
+            e.stopPropagation();
+            this.renderContactForm(contact);
+        });
+
+        el.querySelector('.cm-contact-del-btn').addEventListener('click', async e => {
+            e.stopPropagation();
+            if (!confirm(`Delete contact "${contact.name}"?`)) return;
+            await this._deleteContact(contact.id);
+            this.loadContacts();
+        });
+
+        return el;
+    }
+
+    renderContactDetail(contact) {
+        this.$main.innerHTML = `
+            <div class="cm-main-header">
+                <div>
+                    <div class="cm-main-title">${escHtml(contact.name)}</div>
+                    <div class="cm-main-subtitle">${escHtml(contact.email || 'No email saved')}</div>
+                </div>
+                <button class="cm-btn-primary cm-contact-dm-btn" style="margin-left:auto;font-size:12px;padding:6px 14px">
+                    Message on Canvas
+                </button>
+            </div>
+            <div class="cm-messages" style="padding:24px 16px">
+                <div class="cm-contact-detail">
+                    ${contact.email ? `
+                    <div class="cm-contact-detail-row">
+                        <div class="cm-contact-detail-label">Email</div>
+                        <div class="cm-contact-detail-value">
+                            <a href="mailto:${escHtml(contact.email)}">${escHtml(contact.email)}</a>
+                        </div>
+                    </div>` : ''}
+                    ${contact.notes ? `
+                    <div class="cm-contact-detail-row">
+                        <div class="cm-contact-detail-label">Notes</div>
+                        <div class="cm-contact-detail-value">${escHtml(contact.notes)}</div>
+                    </div>` : ''}
+                    <div class="cm-contact-detail-row" style="margin-top:8px">
+                        <button class="cm-icon-btn cm-contact-edit-detail-btn"
+                                style="border:1px solid #404249;padding:5px 12px;border-radius:4px;font-size:12px">
+                            Edit Contact
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+
+        this.$main.querySelector('.cm-contact-dm-btn').addEventListener('click', () => this.dmContact(contact));
+        this.$main.querySelector('.cm-contact-edit-detail-btn').addEventListener('click', () => this.renderContactForm(contact));
+    }
+
+    async dmContact(contact) {
+        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Looking up on Canvas…</div>';
+        this.recipients = [];
+
+        const trySearch = async (term) => {
+            try {
+                const res = await API.searchRecipients(term, '');
+                const users = Array.isArray(res) ? res : (res.users || []);
+                return users;
+            } catch { return []; }
+        };
+
+        const byEmail = contact.email ? await trySearch(contact.email) : [];
+        const found   = byEmail.length ? byEmail : await trySearch(contact.name);
+
+        if (found.length) {
+            this.recipients = [{ id: String(found[0].id), name: found[0].name || found[0].full_name }];
+        }
+
+        this.courses.length || await API.getCourses().then(c => { this.courses = c; }).catch(() => {});
+        this.renderComposeForm();
+    }
+
+    renderContactForm(contact = null) {
+        const isEdit = !!contact;
+        this.$main.innerHTML = `
+            <div class="cm-compose">
+                <div class="cm-compose-header">
+                    <button class="cm-icon-btn" id="cm-contact-form-back" title="Back">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 12H5m7-7-7 7 7 7"/>
+                        </svg>
+                    </button>
+                    <h2>${isEdit ? 'Edit Contact' : 'Add Contact'}</h2>
+                </div>
+                <div class="cm-compose-body">
+                    <div class="cm-field">
+                        <label>Name</label>
+                        <input type="text" id="cm-contact-name" placeholder="Full name…" value="${escHtml(contact?.name || '')}" />
+                    </div>
+                    <div class="cm-field">
+                        <label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
+                        <input type="email" id="cm-contact-email" placeholder="email@example.com" value="${escHtml(contact?.email || '')}" />
+                    </div>
+                    <div class="cm-field">
+                        <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
+                        <textarea id="cm-contact-notes" placeholder="Class they were in, major, etc…" rows="3">${escHtml(contact?.notes || '')}</textarea>
+                    </div>
+                </div>
+                <div class="cm-compose-footer">
+                    ${isEdit ? `<button class="cm-btn-secondary" id="cm-contact-delete-btn" style="margin-right:auto">Delete</button>` : ''}
+                    <button class="cm-btn-primary" id="cm-contact-save-btn">${isEdit ? 'Save Changes' : 'Add Contact'}</button>
+                </div>
+            </div>`;
+
+        const backToList = () => {
+            this.loadContacts();
+            this.$main.innerHTML = `
+                <div class="cm-placeholder">
+                    <div class="cm-placeholder-icon">👥</div>
+                    <h2>Contacts</h2>
+                    <p>Save emails for students you no longer share a class with.</p>
+                </div>`;
+        };
+
+        this.$main.querySelector('#cm-contact-form-back').addEventListener('click', backToList);
+
+        this.$main.querySelector('#cm-contact-save-btn').addEventListener('click', async () => {
+            const name  = this.$main.querySelector('#cm-contact-name').value.trim();
+            const email = this.$main.querySelector('#cm-contact-email').value.trim();
+            const notes = this.$main.querySelector('#cm-contact-notes').value.trim();
+            if (!name) { alert('Name is required.'); return; }
+
+            const data = await new Promise(r => chrome.storage.local.get('cmContacts', r));
+            let contacts = data.cmContacts || [];
+
+            if (isEdit) {
+                contacts = contacts.map(c => c.id === contact.id ? { ...c, name, email, notes } : c);
+            } else {
+                contacts.push({ id: Date.now() + '_' + Math.random().toString(36).slice(2), name, email, notes });
+            }
+
+            await new Promise(r => chrome.storage.local.set({ cmContacts: contacts }, r));
+            backToList();
+        });
+
+        if (isEdit) {
+            this.$main.querySelector('#cm-contact-delete-btn').addEventListener('click', async () => {
+                if (!confirm(`Delete "${contact.name}"?`)) return;
+                await this._deleteContact(contact.id);
+                backToList();
+            });
+        }
+    }
+
+    async _deleteContact(id) {
+        const data = await new Promise(r => chrome.storage.local.get('cmContacts', r));
+        const contacts = (data.cmContacts || []).filter(c => c.id !== id);
+        await new Promise(r => chrome.storage.local.set({ cmContacts: contacts }, r));
+    }
 }
 
 // Expose as a window global so content.js can reach it regardless of
 // how Firefox wraps the content-script module environment.
 window.CanvasMessenger = CanvasMessenger;
+
