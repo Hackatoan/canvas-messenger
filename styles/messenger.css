@@ -618,3 +618,79 @@
 
 /* ── Popup-specific overrides ────────────────────────────────────────────── */
 .popup-mode .cm-sidebar { width: 200px; min-width: 200px; }
+
+/* ── Contacts tab ────────────────────────────────────────────────────────── */
+.cm-add-contact-btn {
+    display: block;
+    width: calc(100% - 0px);
+    margin: 8px 0 4px;
+    padding: 7px 12px;
+    background: none;
+    border: 1px dashed #404249;
+    border-radius: 4px;
+    color: #b5bac1;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    font-family: inherit;
+    transition: border-color 0.1s, color 0.1s;
+}
+.cm-add-contact-btn:hover { border-color: #5865f2; color: #5865f2; }
+
+.cm-contact-item { align-items: center; }
+
+.cm-contact-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+.cm-contact-item:hover .cm-contact-actions { opacity: 1; }
+
+.cm-contact-notes { font-style: italic; }
+
+.cm-contact-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.cm-contact-detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cm-contact-detail-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #87898c;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.cm-contact-detail-value {
+    font-size: 14px;
+    color: #dcddde;
+}
+
+.cm-contact-detail-value a { color: #5865f2; text-decoration: none; }
+.cm-contact-detail-value a:hover { text-decoration: underline; }
+
+/* Secondary button (delete in contact form) */
+.cm-btn-secondary {
+    background: none;
+    color: #ed4245;
+    border: 1px solid #ed4245;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-family: inherit;
+}
+.cm-btn-secondary:hover { background: rgba(237,66,69,0.15); }
+
