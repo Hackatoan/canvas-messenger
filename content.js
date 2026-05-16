@@ -105,6 +105,9 @@
     pageStyle.textContent = buildPageCSS(PANEL_W);
     document.head.appendChild(pageStyle);
 
+    // declared here so applyFabPos() below can read it before toggle logic
+    let isOpen = false;
+
     // ── FAB position helper ────────────────────────────────────────────────
     function applyFabPos() {
         if (navbarMode) return;
@@ -141,7 +144,6 @@
     shadow.appendChild(loadingEl);
 
     // ── Toggle logic ──────────────────────────────────────────────────────
-    let isOpen = false;
 
     function applyWidth(w) {
         pageStyle.textContent = buildPageCSS(w);
