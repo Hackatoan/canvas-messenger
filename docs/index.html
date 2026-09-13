@@ -78,8 +78,9 @@
     <h1>Chat with your classmates,<br><span class="grad">right inside Canvas.</span></h1>
     <p class="tag">Canvas Messenger adds Discord-style direct messages, group chats, and class-wide channels to Canvas LMS — no separate app, no accounts to juggle.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger">⭳ Get it on GitHub</a>
+      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest">⭳ Download latest</a>
       <a class="btn ghost" href="#setup">How it works</a>
+      <a class="btn ghost" href="https://github.com/Hackatoan/canvas-messenger">View source</a>
     </div>
     <p class="note">Not affiliated with or endorsed by Instructure or Canvas. Canvas is a trademark of Instructure, Inc.</p>
   </div>
@@ -105,7 +106,7 @@
     <h2>Get started</h2>
     <p class="sub">Load the extension, connect Canvas, and start chatting.</p>
     <div class="steps">
-      <div class="step"><div><h3>Install the extension</h3><p>Grab the latest build from the <a href="https://github.com/Hackatoan/canvas-messenger">GitHub repo</a> and load it in your browser (<code>use-chrome.sh</code> / <code>use-firefox.sh</code> build the right manifest, then load it unpacked).</p></div></div>
+      <div class="step"><div><h3>Install the extension</h3><p><strong>Firefox:</strong> download the <code>.xpi</code> from the <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest">latest release</a> and open it in Firefox to install in one click. <strong>Chrome:</strong> download <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest/download/canvas-messenger-chrome.zip">canvas-messenger-chrome.zip</a>, unzip it, then load the folder at <code>chrome://extensions</code> (enable Developer mode → Load unpacked).</p></div></div>
       <div class="step"><div><h3>Connect your Canvas account</h3><p>Open the extension and follow the token setup to link your Canvas profile so classmates can find you.</p></div></div>
       <div class="step"><div><h3>Open any Canvas course</h3><p>The messaging panel appears on top of Canvas. Start a DM, make a group, or drop into the class channel.</p></div></div>
     </div>
@@ -130,7 +131,7 @@
     <p class="sub">The short version.</p>
     <details><summary>Is it free?</summary><p>Yes — free and open source under the repository's license. If it saves you a group-chat headache, you can <a href="https://buymeacoffee.com/hackatoa">buy me a coffee</a>.</p></details>
     <details><summary>Does it work on Chrome and Firefox?</summary><p>Both. The build scripts produce the correct manifest for each browser.</p></details>
-    <details><summary>Do I need my own server?</summary><p>To run your own instance, yes — the relay and signaling servers are open source and container-ready (<code>ghcr.io</code> images + Dockerfiles). Point the extension at your own endpoints.</p></details>
+    <details><summary>Do I need my own server?</summary><p>No — to just use Canvas Messenger, install the extension and it connects to the hosted backend out of the box. You only need your own server if you want to <strong>self-host</strong> the whole stack: the relay and signaling servers are open source and container-ready (<code>ghcr.io</code> images + Dockerfiles), so you can run them yourself and point the extension at your own endpoints.</p></details>
     <details><summary>Is this an official Canvas product?</summary><p>No. Canvas Messenger is an independent, community-built extension. It is not affiliated with or endorsed by Instructure. Canvas is a trademark of Instructure, Inc.</p></details>
     <details><summary>Where's my data?</summary><p>Messages travel peer-to-peer over WebRTC where possible; the relay handles registration, invites, and delivery. Self-host the backend to keep everything on infrastructure you control.</p></details>
   </div>
