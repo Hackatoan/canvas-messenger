@@ -1,71 +1,33 @@
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/hackatoa)
-
 # Canvas Messenger
 
-A browser extension that adds Discord-style messaging to Canvas LMS — direct messages, group chats, class-wide channels, and team/group communication, all without leaving Canvas.
+A Chrome/Firefox extension that adds Discord-style messaging to Canvas LMS — DMs, group chats, and class channels.
+
+☕ **Support:** [Buy Me a Coffee](https://buymeacoffee.com/hackatoa)
+
+## Overview
+
+A browser extension that layers real-time messaging onto Canvas LMS: direct messages, group chats, and class-wide channels, backed by a WebRTC signaling + relay service.
 
 ## Features
 
-- **Direct Messages** — 1:1 and group conversations with any student or professor
-- **Class Chat** — a live class-wide channel for every course, backed by Canvas Discussions (auto-refreshes every 20s)
-- **Groups** — view your Canvas Groups/Teams, DM members, or message the whole group
-- **Recipient search** — search by name, filter by role (Students / Instructors / TAs) and by course
-- **Discord-style UI** — dark theme, grouped messages, floating sidebar on Canvas pages
-- **Unread badge** — extension icon shows unread count, polls every 60 seconds
-- **Auto-setup** — visit your Canvas profile/settings page and the extension detects your Canvas URL and auto-generates your API token
+- Direct messages, group chats, and class-wide channels
+- Real-time delivery over WebRTC
+- Works on top of the existing Canvas UI
 
-## Installation
+## Tech Stack
 
-### Firefox
+JavaScript · Browser Extension (Chrome / Firefox) · WebRTC
 
-1. Download `canvas-messenger-firefox.zip` from [Releases](../../releases/latest) and unzip it
-2. Go to `about:debugging` → **This Firefox** → **Load Temporary Add-on…**
-3. Select the `manifest.json` inside the unzipped folder
+## Development
 
-> Temporary add-ons are removed on Firefox restart. For a permanent install, the extension would need to be signed via [Mozilla AMO](https://addons.mozilla.org).
+Load the extension unpacked from your browser's extensions page (developer mode). See the setup notes for connecting your Canvas API token.
 
-### Chrome / Chromium
+## Support
 
-1. Download `canvas-messenger-chrome.zip` from [Releases](../../releases/latest) and unzip it
-2. Go to `chrome://extensions` → enable **Developer mode** → **Load unpacked**
-3. Select the unzipped folder
+If this project is useful to you, consider supporting development:
 
-## Setup
-
-**Auto-setup (recommended)**
-1. Navigate to **Account → Settings** on your Canvas instance
-2. A blue "Canvas Messenger — Set up" banner appears in the top-right corner
-3. Click **Set up** — the extension fills the token dialog and generates a token
-4. Click **Save to Extension**
-
-**Manual**
-1. Click the extension icon → **Open Settings**
-2. Enter your Canvas URL (e.g. `https://yourschool.instructure.com`)
-3. Paste an API token generated from **Canvas → Account → Settings → New Access Token**
-
-## Privacy
-
-Your API token is stored locally in browser extension storage and never leaves your device. All requests go directly to your school's Canvas instance — no external servers.
-
-## Build from source
-
-```bash
-git clone https://github.com/Hackatoan/canvas-messenger
-cd canvas-messenger
-chmod +x build.sh
-./build.sh
-# outputs dist/canvas-messenger-firefox.zip and dist/canvas-messenger-chrome.zip
-```
-
-## Permissions
-
-| Permission | Why |
-|---|---|
-| `storage` | Save your Canvas URL and API token locally |
-| `alarms` | Poll for unread messages every 60 seconds |
-| `scripting` | Inject token setup helper into Canvas pages |
-| `host_permissions: https://*/*` | Make API calls to your Canvas instance |
+☕ **[Buy Me a Coffee](https://buymeacoffee.com/hackatoa)**
 
 ---
 
-[hackatoa.com](https://hackatoa.com) · [GitHub](https://github.com/Hackatoan) · [Buy Me A Coffee](https://buymeacoffee.com/hackatoa)
+Part of the **[Hackatoa](https://hackatoa.com)** ecosystem — self-hosted apps, browser games, and bots. · [All repositories »](https://github.com/Hackatoan)
