@@ -1,5 +1,7 @@
 # Canvas Messenger
 
+> **🔗 Part of Canvas Messenger:** [canvas-messenger](https://github.com/Hackatoan/canvas-messenger) (extension) · [cm-relay](https://github.com/Hackatoan/cm-relay) (REST API) · [cm-signaling](https://github.com/Hackatoan/cm-signaling) (WebRTC signaling)
+
 A Chrome/Firefox extension that adds Discord-style messaging to Canvas LMS — DMs, group chats, and class channels.
 
 🔗 **Site:** [cm.hackatoa.com](https://cm.hackatoa.com)   ·   ☕ **Support:** [Buy Me a Coffee](https://buymeacoffee.com/hackatoa)
