@@ -2,7 +2,7 @@
 
 A Chrome/Firefox extension that adds Discord-style messaging to Canvas LMS — DMs, group chats, and class channels.
 
-☕ **Support:** [Buy Me a Coffee](https://buymeacoffee.com/hackatoa)
+🔗 **Site:** [cm.hackatoa.com](https://cm.hackatoa.com)   ·   ☕ **Support:** [Buy Me a Coffee](https://buymeacoffee.com/hackatoa)
 
 ## Overview
 
