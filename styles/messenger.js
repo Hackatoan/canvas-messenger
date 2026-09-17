@@ -1259,6 +1259,12 @@ class CanvasMessenger {
 
     renderRelayThreadList(threads, profile) {
         this.$convList.innerHTML = '';
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'cm-relay-search-wrap';
+        searchWrap.innerHTML = `<input type="text" id="cm-relay-msg-search" placeholder="Search messages…" autocomplete="off" />`;
+        this.$convList.appendChild(searchWrap);
+
         const addBtn = document.createElement('button');
         addBtn.className = 'cm-add-contact-btn';
         addBtn.textContent = '+ Find or Add Contact';
@@ -1273,7 +1279,12 @@ class CanvasMessenger {
         });
         this.$convList.appendChild(myIdEl);
 
+        const listWrap = document.createElement('div');
+        listWrap.id = 'cm-relay-thread-items';
+        this.$convList.appendChild(listWrap);
+
         const sorted = [...threads].sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
+        const presenceTargets = [];
         for (const thread of sorted) {
             const el = document.createElement('div');
             el.className = 'cm-conv-item' + (thread.unreadCount ? ' unread' : '');
@@ -1287,16 +1298,93 @@ class CanvasMessenger {
                     <div class="cm-conv-preview">${escHtml(thread.lastMessage || '')}</div>
                 </div>
                 ${thread.unreadCount ? '<div class="cm-unread-dot"></div>' : ''}`;
-            el.querySelector('.cm-relay-av-slot').replaceWith(mkAvatar(thread.contactName));
+            const avatar = mkAvatar(thread.contactName);
+            avatar.style.position = 'relative';
+            el.querySelector('.cm-relay-av-slot').replaceWith(avatar);
+            presenceTargets.push({ thread, avatar });
             el.addEventListener('click', async () => {
-                this.$convList.querySelectorAll('.cm-conv-item').forEach(i => i.classList.remove('active'));
+                listWrap.querySelectorAll('.cm-conv-item').forEach(i => i.classList.remove('active'));
                 el.classList.add('active');
                 el.classList.remove('unread');
                 el.querySelector('.cm-unread-dot')?.remove();
                 chrome.runtime.sendMessage({ action: 'relayMarkRead', threadId: thread.id });
                 this.openRelayThread(thread, profile);
             });
-            this.$convList.appendChild(el);
+            listWrap.appendChild(el);
+        }
+
+        const contactIds = [...new Set(sorted.map(t => t.contactId))];
+        this.fetchRelayPresence(contactIds).then(presence => {
+            for (const { thread, avatar } of presenceTargets) {
+                if (presence[thread.contactId]?.online) avatar.appendChild(this._mkPresenceDot());
+            }
+        });
+
+        // Client-side search across cached thread names + stored message bodies
+        const searchInput = searchWrap.querySelector('#cm-relay-msg-search');
+        let searchDebounce;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchDebounce);
+            const q = searchInput.value.trim().toLowerCase();
+            if (!q) {
+                listWrap.style.display = '';
+                this.$convList.querySelector('#cm-relay-search-hits')?.remove();
+                return;
+            }
+            searchDebounce = setTimeout(() => this.doRelaySearch(q, threads, profile, listWrap), 200);
+        });
+    }
+
+    async doRelaySearch(q, threads, profile, listWrap) {
+        listWrap.style.display = 'none';
+        let resultsEl = this.$convList.querySelector('#cm-relay-search-hits');
+        if (!resultsEl) {
+            resultsEl = document.createElement('div');
+            resultsEl.id = 'cm-relay-search-hits';
+            this.$convList.appendChild(resultsEl);
+        }
+        resultsEl.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+
+        const matches = [];
+        for (const t of threads) {
+            if (t.contactName.toLowerCase().includes(q)) {
+                matches.push({ thread: t, snippet: t.lastMessage || '', sentAt: t.lastAt || '' });
+            }
+        }
+        const keys = threads.map(t => `relayMsg_${t.id}`);
+        const data = keys.length ? await new Promise(r => chrome.storage.local.get(keys, r)) : {};
+        for (const t of threads) {
+            const msgs = data[`relayMsg_${t.id}`] || [];
+            for (const m of msgs) {
+                if (m.body && m.body.toLowerCase().includes(q)) {
+                    matches.push({ thread: t, snippet: m.body, sentAt: m.sentAt });
+                }
+            }
+        }
+        matches.sort((a, b) => new Date(b.sentAt || 0) - new Date(a.sentAt || 0));
+        const top = matches.slice(0, 30);
+
+        if (!top.length) { resultsEl.innerHTML = '<div class="cm-empty">No matches</div>'; return; }
+
+        resultsEl.innerHTML = '';
+        for (const m of top) {
+            const el = document.createElement('div');
+            el.className = 'cm-conv-item';
+            el.innerHTML = `
+                <div class="cm-relay-av-slot"></div>
+                <div class="cm-conv-info">
+                    <div class="cm-conv-top">
+                        <span class="cm-conv-name">${escHtml(m.thread.contactName)}</span>
+                        <span class="cm-conv-time">${m.sentAt ? relativeTime(m.sentAt) : ''}</span>
+                    </div>
+                    <div class="cm-conv-preview">${escHtml(m.snippet)}</div>
+                </div>`;
+            el.querySelector('.cm-relay-av-slot').replaceWith(mkAvatar(m.thread.contactName));
+            el.addEventListener('click', () => {
+                chrome.runtime.sendMessage({ action: 'relayMarkRead', threadId: m.thread.id });
+                this.openRelayThread(m.thread, profile);
+            });
+            resultsEl.appendChild(el);
         }
     }
 
@@ -1314,6 +1402,11 @@ class CanvasMessenger {
     }
 
     renderRelayChat(thread, contact, messages, profile) {
+        const receiptHtml = m => !m.fromMe ? '' :
+            (m.read
+                ? '<span class="cm-relay-receipt read" title="Read">✓✓</span>'
+                : '<span class="cm-relay-receipt" title="Sent">✓</span>');
+
         const renderMsg = m => {
             const isMe = m.fromMe;
             const name = isMe ? (profile.name || 'Me') : contact.name;
@@ -1326,6 +1419,7 @@ class CanvasMessenger {
                         <span class="cm-msg-author" style="color:${isMe ? '#5865f2' : '#f2f3f5'}">${escHtml(name)}</span>
                         <span class="cm-msg-timestamp">${fullTime(m.sentAt)}</span>
                         <span class="cm-relay-lock" title="End-to-end encrypted">🔒</span>
+                        ${receiptHtml(m)}
                     </div>
                     <div class="cm-msg-bubble">${escHtml(m.body)}</div>
                 </div>
@@ -1336,7 +1430,7 @@ class CanvasMessenger {
             <div class="cm-main-header">
                 <div>
                     <div class="cm-main-title">${escHtml(contact.name)}</div>
-                    <div class="cm-main-subtitle cm-relay-subtitle">🔒 End-to-end encrypted · Cross-campus</div>
+                    <div class="cm-main-subtitle cm-relay-subtitle" id="cm-relay-presence">🔒 End-to-end encrypted · Cross-campus</div>
                 </div>
                 <button class="cm-icon-btn cm-relay-invite-header-btn" id="cm-relay-invite-btn" title="Share invite link">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1348,6 +1442,7 @@ class CanvasMessenger {
             <div class="cm-messages" id="cm-relay-messages">
                 ${messages.map(renderMsg).join('') || '<div class="cm-empty">No messages yet — say hello!</div>'}
             </div>
+            <div class="cm-typing-indicator" id="cm-relay-typing-indicator" style="display:none">${escHtml(contact.name)} is typing…</div>
             <div class="cm-input-area">
                 <div class="cm-input-box">
                     <textarea id="cm-relay-input" placeholder="Message ${escHtml(contact.name)}… (encrypted)" rows="1"></textarea>
@@ -1362,9 +1457,24 @@ class CanvasMessenger {
         const sendBtn  = this.$main.querySelector('#cm-relay-send');
         msgEl.scrollTop = msgEl.scrollHeight;
 
+        // Live presence — fetched once, no push channel needed for a single contact.
+        this.fetchRelayPresence([contact.id]).then(presence => {
+            const p = presence[contact.id];
+            const el = this.$main.querySelector('#cm-relay-presence');
+            if (!el || !p) return;
+            if (p.online) el.textContent = '🟢 Online';
+            else if (p.lastSeen) el.textContent = `Last seen ${relativeTime(p.lastSeen)}`;
+        });
+
+        let lastTypingSentAt = 0;
         textarea.addEventListener('input', () => {
             autoResize(textarea);
             sendBtn.classList.toggle('active', textarea.value.trim().length > 0);
+            const now = Date.now();
+            if (textarea.value.trim() && now - lastTypingSentAt > 2000) {
+                lastTypingSentAt = now;
+                chrome.runtime.sendMessage({ action: 'relayTyping', to: contact.id });
+            }
         });
 
         const doSend = async () => {
@@ -1383,6 +1493,7 @@ class CanvasMessenger {
                         <span class="cm-msg-author" style="color:#5865f2">${escHtml(myName)}</span>
                         <span class="cm-msg-timestamp">Just now</span>
                         <span class="cm-relay-lock" title="End-to-end encrypted">🔒</span>
+                        <span class="cm-relay-receipt" title="Sent">✓</span>
                     </div>
                     <div class="cm-msg-bubble">${escHtml(body)}</div>
                 </div>`;
@@ -1407,8 +1518,30 @@ class CanvasMessenger {
                     msgEl.scrollTop = msgEl.scrollHeight;
                 }
             }
+            // The chat is open, so tell the server these were seen right away.
+            chrome.runtime.sendMessage({ action: 'relayMarkRead', threadId: thread.id });
         };
         document.addEventListener('cm-relay-msg', this._relayListener);
+
+        this._relayTypingListener = (e) => {
+            if (e.detail.from !== contact.id) return;
+            const ind = this.$main.querySelector('#cm-relay-typing-indicator');
+            if (!ind) return;
+            ind.style.display = 'block';
+            clearTimeout(this._relayTypingHideTimer);
+            this._relayTypingHideTimer = setTimeout(() => { ind.style.display = 'none'; }, 3000);
+        };
+        document.addEventListener('cm-relay-typing', this._relayTypingListener);
+
+        this._relayReadListener = (e) => {
+            if (e.detail.threadId !== thread.id) return;
+            msgEl.querySelectorAll('.cm-relay-receipt').forEach(el => {
+                el.textContent = '✓✓';
+                el.classList.add('read');
+                el.title = 'Read';
+            });
+        };
+        document.addEventListener('cm-relay-read', this._relayReadListener);
 
         // Invite share button
         this.$main.querySelector('#cm-relay-invite-btn').addEventListener('click', async () => {
@@ -1430,6 +1563,28 @@ class CanvasMessenger {
             document.removeEventListener('cm-relay-msg', this._relayListener);
             this._relayListener = null;
         }
+        if (this._relayTypingListener) {
+            document.removeEventListener('cm-relay-typing', this._relayTypingListener);
+            this._relayTypingListener = null;
+        }
+        if (this._relayReadListener) {
+            document.removeEventListener('cm-relay-read', this._relayReadListener);
+            this._relayReadListener = null;
+        }
+        clearTimeout(this._relayTypingHideTimer);
+    }
+
+    _mkPresenceDot() {
+        const dot = document.createElement('div');
+        dot.className = 'cm-presence-dot';
+        return dot;
+    }
+
+    async fetchRelayPresence(ids) {
+        if (!ids.length) return {};
+        try {
+            return await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetPresence', ids }, r)) || {};
+        } catch { return {}; }
     }
 
     async renderRelaySearch(profile) {

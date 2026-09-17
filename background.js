@@ -2,13 +2,26 @@
 
 const SIGNALING_URL = 'wss://signaling.hackatoa.com';
 let sigWs = null;
+let sigReconnectTimer = null;
+let sigReconnectDelay = 2000;
+const RECONNECT_MAX_DELAY = 30000;
+
+// Broadcast a message to every live Canvas content-script tab.
+async function broadcastToTabs(action, payload) {
+    const tabs = await chrome.tabs.query({ url: ['https://*/*', 'http://*/*'] });
+    for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { action, payload }).catch(() => {});
+    }
+}
 
 function connectSignaling() {
     if (sigWs && (sigWs.readyState === WebSocket.OPEN || sigWs.readyState === WebSocket.CONNECTING)) return;
+    clearTimeout(sigReconnectTimer);
     try {
         sigWs = new WebSocket(SIGNALING_URL);
 
         sigWs.onopen = async () => {
+            sigReconnectDelay = 2000;
             const { currentUser } = await getSettings();
             if (currentUser?.id) {
                 sigWs.send(JSON.stringify({ type: 'register', userId: String(currentUser.id), name: currentUser.name || '' }));
@@ -19,21 +32,21 @@ function connectSignaling() {
             let msg;
             try { msg = JSON.parse(e.data); } catch { return; }
             if (msg.type === 'incoming-call' || msg.type === 'call-failed') {
-                // Broadcast to all active Canvas tabs
-                const tabs = await chrome.tabs.query({ url: ['https://*/*', 'http://*/*'] });
-                for (const tab of tabs) {
-                    chrome.tabs.sendMessage(tab.id, { action: 'cm-call-event', payload: msg }).catch(() => {});
-                }
+                broadcastToTabs('cm-call-event', msg);
             }
         };
 
         sigWs.onerror = () => {};
-        sigWs.onclose = () => { sigWs = null; };
+        sigWs.onclose = () => {
+            sigWs = null;
+            // Reconnect promptly with backoff instead of waiting for the
+            // next minute-interval poll alarm — otherwise a brief network
+            // blip can leave the extension unreachable for incoming calls.
+            sigReconnectTimer = setTimeout(connectSignaling, sigReconnectDelay);
+            sigReconnectDelay = Math.min(sigReconnectDelay * 2, RECONNECT_MAX_DELAY);
+        };
     } catch {}
 }
-
-// Reconnect signaling on every badge poll
-const _origUpdateBadge = typeof updateBadge !== 'undefined' ? updateBadge : null;
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -232,6 +245,8 @@ async function signalingRequest(msg) {
 const RELAY_API = 'https://relay.hackatoa.com/api';
 const RELAY_WS  = 'wss://relay.hackatoa.com/ws';
 let relayWs = null;
+let relayReconnectTimer = null;
+let relayReconnectDelay = 2000;
 
 async function getRelayProfile() {
     return new Promise(r => chrome.storage.local.get('relayProfile', d => r(d.relayProfile || null)));
@@ -241,23 +256,48 @@ function connectRelay() {
     getRelayProfile().then(profile => {
         if (!profile) return;
         if (relayWs && (relayWs.readyState === WebSocket.OPEN || relayWs.readyState === WebSocket.CONNECTING)) return;
+        clearTimeout(relayReconnectTimer);
         relayWs = new WebSocket(RELAY_WS);
-        relayWs.onopen = () => relayWs.send(JSON.stringify({ type: 'auth', token: profile.authToken }));
+        relayWs.onopen = () => {
+            relayReconnectDelay = 2000;
+            relayWs.send(JSON.stringify({ type: 'auth', token: profile.authToken }));
+        };
         relayWs.onmessage = async (e) => {
             try {
                 const msg = JSON.parse(e.data);
                 if (msg.type === 'message') {
                     await storeRelayMessage(msg.message);
-                    const tabs = await chrome.tabs.query({ url: ['https://*/*', 'http://*/*'] });
-                    for (const tab of tabs) {
-                        chrome.tabs.sendMessage(tab.id, { action: 'relay-message', payload: msg.message }).catch(() => {});
-                    }
+                    broadcastToTabs('relay-message', msg.message);
+                } else if (msg.type === 'typing') {
+                    broadcastToTabs('relay-typing', { from: msg.from });
+                } else if (msg.type === 'read') {
+                    await markRelayThreadRead(msg.threadId, msg.readAt);
+                    broadcastToTabs('relay-read', { threadId: msg.threadId, readAt: msg.readAt });
                 }
             } catch {}
         };
-        relayWs.onclose = () => { relayWs = null; };
+        relayWs.onclose = () => {
+            relayWs = null;
+            // Same rationale as signaling: reconnect quickly with backoff so
+            // messages/typing/read-receipts keep flowing after a blip.
+            relayReconnectTimer = setTimeout(connectRelay, relayReconnectDelay);
+            relayReconnectDelay = Math.min(relayReconnectDelay * 2, RECONNECT_MAX_DELAY);
+        };
         relayWs.onerror = () => {};
     }).catch(() => {});
+}
+
+// Flag locally-stored outgoing messages in a thread as read once the peer
+// has read them, so the sender's UI can show a "read" receipt.
+async function markRelayThreadRead(threadId, readAt) {
+    if (!threadId || !readAt) return;
+    const key = `relayMsg_${threadId}`;
+    const stored = await new Promise(r => chrome.storage.local.get(key, d => r(d[key] || [])));
+    let changed = false;
+    for (const m of stored) {
+        if (m.fromMe && !m.read && m.sentAt <= readAt) { m.read = true; changed = true; }
+    }
+    if (changed) await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
 }
 
 async function relayDecrypt(encB64, ivB64, privateJwk, peerPublicJwk) {
@@ -355,7 +395,7 @@ async function relaySendMessage({ recipientId, body }) {
     const { id, threadId, sentAt } = await res.json();
     const key = `relayMsg_${threadId}`;
     const stored = await new Promise(r => chrome.storage.local.get(key, d => r(d[key] || [])));
-    stored.push({ id, threadId, senderId: profile.id, body, sentAt, fromMe: true });
+    stored.push({ id, threadId, senderId: profile.id, body, sentAt, fromMe: true, read: false });
     await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
     await updateRelayThread(threadId, recipientId, body, sentAt, false);
     return { ok: true, id, threadId };
@@ -393,7 +433,7 @@ async function syncRelayMessages() {
             if (contact) {
                 try { body = await relayDecrypt(msg.encryptedBody, msg.iv, profile.privateKeyJwk, contact.publicKeyJwk); } catch {}
             }
-            stored.push({ id: msg.id, threadId: msg.threadId, senderId: msg.senderId, body, sentAt: msg.sentAt, fromMe });
+            stored.push({ id: msg.id, threadId: msg.threadId, senderId: msg.senderId, body, sentAt: msg.sentAt, fromMe, read: !!msg.readAt });
             await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
             await updateRelayThread(msg.threadId, otherId, body, msg.sentAt, !fromMe);
         }
@@ -474,7 +514,29 @@ async function handleMessage(msg, sender = {}) {
             const th = await new Promise(r => chrome.storage.local.get('relayThreads', d => r(d.relayThreads || [])));
             const ti = th.findIndex(t => t.id === msg.threadId);
             if (ti >= 0) { th[ti].unreadCount = 0; await new Promise(r => chrome.storage.local.set({ relayThreads: th }, r)); }
+            const p = await getRelayProfile();
+            if (p) {
+                // Best-effort: tell the server so the sender gets a read receipt.
+                fetch(`${RELAY_API}/messages/read`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${p.authToken}` },
+                    body: JSON.stringify({ threadId: msg.threadId }),
+                }).catch(() => {});
+            }
             return { ok: true };
+        }
+        case 'relayTyping': {
+            if (relayWs?.readyState === WebSocket.OPEN) {
+                relayWs.send(JSON.stringify({ type: 'typing', to: msg.to }));
+            }
+            return { ok: true };
+        }
+        case 'relayGetPresence': {
+            const p = await getRelayProfile();
+            if (!p) throw new Error('Not registered');
+            const ids = (msg.ids || []).join(',');
+            const rp = await fetch(`${RELAY_API}/presence?ids=${encodeURIComponent(ids)}`, { headers: { 'Authorization': `Bearer ${p.authToken}` } });
+            return rp.json();
         }
         case 'relayCreateInvite': {
             const p = await getRelayProfile();
