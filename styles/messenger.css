@@ -726,6 +726,49 @@
 
 .cm-relay-result { position: relative; }
 
+.cm-relay-search-wrap { padding: 8px 4px 0; }
+.cm-relay-search-wrap input {
+    width: 100%;
+    background: #1e1f22;
+    border: 1px solid #1e1f22;
+    border-radius: 4px;
+    color: #dcddde;
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+}
+.cm-relay-search-wrap input:focus { border-color: #5865f2; }
+
+.cm-relay-receipt {
+    font-size: 11px;
+    color: #87898c;
+    margin-left: 2px;
+    letter-spacing: -1px;
+}
+.cm-relay-receipt.read { color: #5865f2; letter-spacing: normal; }
+
+.cm-presence-dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #3ba55c;
+    border: 2px solid #2b2d31;
+    bottom: -1px;
+    right: -1px;
+}
+
+.cm-typing-indicator {
+    padding: 0 16px 6px;
+    font-size: 12px;
+    font-style: italic;
+    color: #87898c;
+    flex-shrink: 0;
+}
+
 /* ── Video call button ───────────────────────────────────────────────────── */
 .cm-call-btn {
     margin-left: auto;
