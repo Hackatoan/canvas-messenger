@@ -231,10 +231,10 @@ async function signalingRequest(msg) {
         connectSignaling();
         // Wait up to 2s for connection
         await new Promise((resolve) => {
-            const t = setTimeout(resolve, 2000);
             const check = setInterval(() => {
                 if (sigWs?.readyState === WebSocket.OPEN) { clearInterval(check); clearTimeout(t); resolve(); }
             }, 100);
+            const t = setTimeout(() => { clearInterval(check); resolve(); }, 2000);
         });
     }
     if (sigWs?.readyState === WebSocket.OPEN) sigWs.send(JSON.stringify(msg));
