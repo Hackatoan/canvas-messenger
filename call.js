@@ -18,6 +18,7 @@ const params       = new URLSearchParams(location.search);
 const peerId       = params.get('peerId');
 const peerName     = params.get('peerName') || 'Unknown';
 const isInitiator  = params.get('initiator') === 'true';
+const callToken    = params.get('token');
 
 // DOM
 const remoteVideo      = document.getElementById('remote-video');
@@ -226,4 +227,17 @@ function hangup(notify = true) {
 
 window.addEventListener('beforeunload', () => hangup(true));
 
-init();
+// call.html is web-accessible from any origin, so refuse to start unless we
+// were opened through the extension's own call flow (background.js mints a
+// one-time token in session storage that only the extension can read).
+(async () => {
+    const key = `callToken_${callToken}`;
+    const stored = callToken ? await chrome.storage.session.get(key) : {};
+    if (!callToken || !stored[key]) {
+        statusEl.textContent = 'Invalid call link.';
+        setTimeout(() => window.close(), 2000);
+        return;
+    }
+    await chrome.storage.session.remove(key);
+    init();
+})();
