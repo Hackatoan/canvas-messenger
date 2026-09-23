@@ -564,7 +564,7 @@ class CanvasMessenger {
                             <span class="cm-msg-author" style="color:${isMe ? '#5865f2' : '#f2f3f5'}">${escHtml(name)}</span>
                             <span class="cm-msg-timestamp">${fullTime(firstEntry.created_at)}</span>
                         </div>
-                        ${g.entries.map(e => `<div class="cm-msg-bubble">${stripHtml(e.message || '')}</div>`).join('')}
+                        ${g.entries.map(e => `<div class="cm-msg-bubble">${escHtml(stripHtml(e.message || ''))}</div>`).join('')}
                     </div>
                 </div>`;
         }).join('');
