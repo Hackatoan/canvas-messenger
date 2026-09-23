@@ -222,7 +222,13 @@ async function sendReplyWithAttachment(convId, body, attachmentIds) {
 // ── Video call ────────────────────────────────────────────────────────────────
 
 async function openCallWindow(peerId, peerName, isInitiator) {
-    const url = chrome.runtime.getURL(`call.html?peerId=${encodeURIComponent(peerId)}&peerName=${encodeURIComponent(peerName)}&initiator=${isInitiator}`);
+    // call.html is a web_accessible_resource reachable from any site, so a bare
+    // peerId/peerName URL could be forged by an untrusted page to place a call
+    // as the logged-in user. Gate it behind a one-time token that only this
+    // extension can mint/read (chrome.storage.session isn't visible to pages).
+    const token = crypto.randomUUID();
+    await chrome.storage.session.set({ [`callToken_${token}`]: true });
+    const url = chrome.runtime.getURL(`call.html?peerId=${encodeURIComponent(peerId)}&peerName=${encodeURIComponent(peerName)}&initiator=${isInitiator}&token=${token}`);
     await chrome.windows.create({ url, type: 'popup', width: 720, height: 500 });
 }
 
