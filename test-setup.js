@@ -22,6 +22,16 @@ const CANVAS_URL = arg('url');
 const USERNAME   = arg('user');
 const PASSWORD   = arg('pass');
 
+// ── Secret redaction ──────────────────────────────────────────────────────────
+// This script prints Canvas API/network activity to stdout for diagnostics.
+// Canvas access tokens (long-lived, full-account-scope credentials) can show up
+// verbatim in storage dumps and in the body of the token-creation response —
+// never print them in the clear, even to a local terminal.
+const TOKEN_LIKE_RE = /[a-zA-Z0-9~_-]{20,}/g;
+function redact(str) {
+    return String(str).replace(TOKEN_LIKE_RE, m => `${m.slice(0, 4)}…[REDACTED]`);
+}
+
 if (!CANVAS_URL || !USERNAME || !PASSWORD) {
     console.error('Usage: node test-setup.js --url <canvas-url> --user <email> --pass <password>');
     process.exit(1);
@@ -180,7 +190,7 @@ if (!fs.existsSync(EXTENSION_DIR)) {
         const u = resp.url();
         if (/token|access/i.test(u) && !u.includes('adfs') && !u.includes('.js') && !u.includes('.css')) {
             console.log('  [response]', resp.status(), u);
-            resp.text().then(b => console.log('  [body]', b.slice(0, 200))).catch(() => {});
+            resp.text().then(b => console.log('  [body]', redact(b.slice(0, 200)))).catch(() => {});
         }
     });
 
@@ -255,7 +265,9 @@ if (!fs.existsSync(EXTENSION_DIR)) {
         const stored = await page.evaluate(() =>
             new Promise(r => chrome?.storage?.local?.get(['apiToken', 'canvasUrl'], r))
         ).catch(() => null);
-        console.log('  Stored settings:', stored);
+        console.log('  Stored settings:', stored
+            ? { canvasUrl: stored.canvasUrl, apiToken: stored.apiToken ? '[SET]' : '[NOT SET]' }
+            : 'unavailable');
     } else {
         console.log('  ✓ Banner visible');
     }
