@@ -14,7 +14,8 @@ jobs:
           import jwt, time, requests, os
           key    = os.environ['AMO_API_KEY']
           secret = os.environ['AMO_API_SECRET']
-          payload = {'iss': key, 'jti': str(time.time()), 'iat': time.time(), 'exp': time.time() + 300}
+          now = int(time.time())
+          payload = {'iss': key, 'jti': str(now), 'iat': now, 'exp': now + 30}
           token   = jwt.encode(payload, secret, algorithm='HS256')
           headers = {'Authorization': f'JWT {token}'}
           url = 'https://addons.mozilla.org/api/v5/addons/addon/canvas-messenger@hackatoa/versions/'
