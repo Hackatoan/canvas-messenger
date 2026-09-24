@@ -23,8 +23,14 @@ function connectSignaling() {
         sigWs.onopen = async () => {
             sigReconnectDelay = 2000;
             const { currentUser } = await getSettings();
-            if (currentUser?.id) {
-                sigWs.send(JSON.stringify({ type: 'register', userId: String(currentUser.id), name: currentUser.name || '' }));
+            // A relay token proves we actually own this Canvas identity — see
+            // cm-signaling's registration-ownership check. Without one (messaging
+            // never set up yet) there's nothing to verify against, so don't
+            // register; connectSignaling() runs again once relayRegister()
+            // succeeds, at which point this picks up the new token.
+            const profile = await getRelayProfile();
+            if (currentUser?.id && profile?.authToken) {
+                sigWs.send(JSON.stringify({ type: 'register', userId: String(currentUser.id), name: currentUser.name || '', token: profile.authToken }));
             }
         };
 
@@ -366,22 +372,34 @@ async function updateRelayThread(threadId, otherUserId, lastBody, lastAt, incUnr
 }
 
 async function relayRegister({ name, email }) {
-    const { canvasUrl, currentUser } = await getSettings();
+    const { canvasUrl, currentUser, apiToken } = await getSettings();
     const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
     const publicKeyJwk  = await crypto.subtle.exportKey('jwk', kp.publicKey);
     const privateKeyJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
 
+    // canvasToken proves to the relay that we actually hold a live Canvas
+    // session for this canvasUserId — required to reuse/reclaim an existing
+    // relay account (see cm-relay's /api/register: without this, anyone who
+    // knew a target's canvasUserId+canvasUrl, neither of which is secret,
+    // could steal their authToken and hijack their E2E publicKey). Brand new
+    // accounts don't need it since there's nothing to prove ownership of yet.
     const res = await fetch(`${RELAY_API}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email: email || null, publicKey: JSON.stringify(publicKeyJwk),
-            canvasUserId: currentUser?.id ? String(currentUser.id) : null, canvasUrl: canvasUrl || null }),
+            canvasUserId: currentUser?.id ? String(currentUser.id) : null, canvasUrl: canvasUrl || null,
+            canvasToken: apiToken || null }),
     });
     if (!res.ok) throw new Error(`Registration failed: ${res.status}`);
     const { id, authToken } = await res.json();
     const profile = { id, authToken, name, email: email || null, publicKeyJwk, privateKeyJwk, registeredAt: new Date().toISOString() };
     await new Promise(r => chrome.storage.local.set({ relayProfile: profile }, r));
     connectRelay();
+    // Now that a relay token exists, (re-)register for calls too — signaling
+    // registration is a no-op without one, so a socket opened before setup
+    // finished never got registered.
+    if (sigWs && sigWs.readyState === WebSocket.OPEN) sigWs.onopen();
+    else connectSignaling();
     return { ok: true, id };
 }
 
