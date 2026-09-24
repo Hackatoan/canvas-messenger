@@ -1,0 +1,54 @@
+name: Fetch signed XPI (temporary)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download signed XPI and attach to release
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install PyJWT requests --quiet
+          python3 - <<'EOF'
+          import jwt, time, requests, os, sys, subprocess
+
+          key    = os.environ['AMO_API_KEY']
+          secret = os.environ['AMO_API_SECRET']
+
+          def auth_headers():
+              now = int(time.time())
+              payload = {'iss': key, 'jti': str(now), 'iat': now, 'exp': now + 30}
+              token = jwt.encode(payload, secret, algorithm='HS256')
+              return {'Authorization': f'JWT {token}'}
+
+          url = 'https://addons.mozilla.org/api/v5/addons/addon/canvas-messenger@hackatoa/versions/?filter=all_with_unlisted'
+          r = requests.get(url, headers=auth_headers())
+          r.raise_for_status()
+          versions = r.json()['results']
+          v = next((v for v in versions if v['version'] == '1.9.2'), None)
+          if not v:
+              print('Version 1.9.2 not found'); sys.exit(1)
+
+          status = v['file']['status']
+          print(f"file status: {status}")
+          if status != 'public':
+              print('Not approved yet, nothing to do.'); sys.exit(0)
+
+          file_url = v['file']['url']
+          xr = requests.get(file_url, headers=auth_headers())
+          xr.raise_for_status()
+          with open('canvas-messenger-firefox-signed.xpi', 'wb') as f:
+              f.write(xr.content)
+          print(f'Downloaded {len(xr.content)} bytes')
+
+          subprocess.run(['gh', 'release', 'upload', 'v1.9.2', 'canvas-messenger-firefox-signed.xpi', '--clobber'], check=True)
+          print('Uploaded to release v1.9.2')
+          EOF
