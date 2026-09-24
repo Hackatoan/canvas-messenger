@@ -18,7 +18,7 @@ jobs:
           payload = {'iss': key, 'jti': str(now), 'iat': now, 'exp': now + 30}
           token   = jwt.encode(payload, secret, algorithm='HS256')
           headers = {'Authorization': f'JWT {token}'}
-          url = 'https://addons.mozilla.org/api/v5/addons/addon/canvas-messenger@hackatoa/versions/'
+          url = 'https://addons.mozilla.org/api/v5/addons/addon/canvas-messenger@hackatoa/versions/?filter=all_with_unlisted'
           r = requests.get(url, headers=headers)
           print(r.status_code)
           print(r.text)
