@@ -372,16 +372,23 @@ async function updateRelayThread(threadId, otherUserId, lastBody, lastAt, incUnr
 }
 
 async function relayRegister({ name, email }) {
-    const { canvasUrl, currentUser } = await getSettings();
+    const { canvasUrl, currentUser, apiToken } = await getSettings();
     const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
     const publicKeyJwk  = await crypto.subtle.exportKey('jwk', kp.publicKey);
     const privateKeyJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
 
+    // canvasToken proves to the relay that we actually hold a live Canvas
+    // session for this canvasUserId — required to reuse/reclaim an existing
+    // relay account (see cm-relay's /api/register: without this, anyone who
+    // knew a target's canvasUserId+canvasUrl, neither of which is secret,
+    // could steal their authToken and hijack their E2E publicKey). Brand new
+    // accounts don't need it since there's nothing to prove ownership of yet.
     const res = await fetch(`${RELAY_API}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email: email || null, publicKey: JSON.stringify(publicKeyJwk),
-            canvasUserId: currentUser?.id ? String(currentUser.id) : null, canvasUrl: canvasUrl || null }),
+            canvasUserId: currentUser?.id ? String(currentUser.id) : null, canvasUrl: canvasUrl || null,
+            canvasToken: apiToken || null }),
     });
     if (!res.ok) throw new Error(`Registration failed: ${res.status}`);
     const { id, authToken } = await res.json();
