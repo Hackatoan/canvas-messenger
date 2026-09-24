@@ -110,6 +110,7 @@ class CanvasMessenger {
         this.searchDebounce = null;
 
         this.pendingSnippet = null;
+        this._recipientClickHandler = null; // shared document-level listener, see setupRecipientInput()
         this.root.innerHTML = '';
         this.render();
     }
@@ -934,11 +935,25 @@ class CanvasMessenger {
             }, 300);
         });
 
-        document.addEventListener('click', e => {
-            if (!box.contains(e.target) && !results.contains(e.target)) {
-                results.style.display = 'none';
-            }
-        }, { once: false });
+        // setupRecipientInput() re-runs every time compose is (re)opened (new message,
+        // DM a group member, message a group, DM a contact, etc). Previously this attached
+        // a brand-new document-level 'click' listener each time and never removed it, so a
+        // session with several compose opens would accumulate an ever-growing pile of dead
+        // listeners running on every click. Attach the listener once per messenger instance
+        // and just repoint it at the currently-active box/results on each call instead.
+        this._activeRecipientBox = box;
+        this._activeRecipientResults = results;
+        if (!this._recipientClickHandler) {
+            this._recipientClickHandler = e => {
+                const activeBox = this._activeRecipientBox;
+                const activeResults = this._activeRecipientResults;
+                if (!activeBox || !activeResults) return;
+                if (!activeBox.contains(e.target) && !activeResults.contains(e.target)) {
+                    activeResults.style.display = 'none';
+                }
+            };
+            document.addEventListener('click', this._recipientClickHandler);
+        }
 
         box.addEventListener('click', () => input.focus());
     }
