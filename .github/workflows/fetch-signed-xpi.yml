@@ -49,6 +49,7 @@ jobs:
               f.write(xr.content)
           print(f'Downloaded {len(xr.content)} bytes')
 
-          subprocess.run(['gh', 'release', 'upload', 'v1.9.2', 'canvas-messenger-firefox-signed.xpi', '--clobber'], check=True)
+          subprocess.run(['gh', 'release', 'upload', 'v1.9.2', 'canvas-messenger-firefox-signed.xpi',
+                           '--clobber', '--repo', 'Hackatoan/canvas-messenger'], check=True)
           print('Uploaded to release v1.9.2')
           EOF
