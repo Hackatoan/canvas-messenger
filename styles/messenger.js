@@ -75,9 +75,11 @@ function autoResize(el) {
 }
 
 function stripHtml(html) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    return tmp.textContent || tmp.innerText || '';
+    // DOMParser-produced documents have no browsing context, so <img>/<svg>
+    // event handlers (onerror, onload) never fire — unlike setting innerHTML
+    // on a detached div, which still triggers them and can run attacker JS.
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    return doc.body.textContent || '';
 }
 
 // ── Avatar element ─────────────────────────────────────────────────────────
