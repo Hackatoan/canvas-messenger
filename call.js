@@ -37,7 +37,7 @@ const btnHangup        = document.getElementById('btn-hangup');
 
 // State
 let ws, pc, localStream, screenStream;
-let userId, userName;
+let userId, userName, relayToken;
 let callEnded = false;
 let callStartTime = null;
 let timerInterval = null;
@@ -49,10 +49,11 @@ remoteNameBig.textContent = peerName;
 remoteAvatar.textContent = peerName.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
 async function init() {
-    const data = await chrome.storage.local.get(['currentUser']);
+    const data = await chrome.storage.local.get(['currentUser', 'relayProfile']);
     const user = data.currentUser || {};
-    userId   = String(user.id || ('guest-' + Date.now()));
-    userName = user.name || 'You';
+    userId      = String(user.id || ('guest-' + Date.now()));
+    userName    = user.name || 'You';
+    relayToken  = data.relayProfile?.authToken || null;
 
     // Acquire local media
     try {
@@ -78,7 +79,7 @@ function connectSignaling() {
     ws = new WebSocket(SIGNALING_URL);
 
     ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'register', userId, name: userName }));
+        ws.send(JSON.stringify({ type: 'register', userId, name: userName, token: relayToken }));
         statusEl.textContent = isInitiator ? 'Calling…' : 'Connecting…';
         if (isInitiator) setTimeout(startCall, 600);
     };

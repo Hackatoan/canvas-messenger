@@ -23,8 +23,14 @@ function connectSignaling() {
         sigWs.onopen = async () => {
             sigReconnectDelay = 2000;
             const { currentUser } = await getSettings();
-            if (currentUser?.id) {
-                sigWs.send(JSON.stringify({ type: 'register', userId: String(currentUser.id), name: currentUser.name || '' }));
+            // A relay token proves we actually own this Canvas identity — see
+            // cm-signaling's registration-ownership check. Without one (messaging
+            // never set up yet) there's nothing to verify against, so don't
+            // register; connectSignaling() runs again once relayRegister()
+            // succeeds, at which point this picks up the new token.
+            const profile = await getRelayProfile();
+            if (currentUser?.id && profile?.authToken) {
+                sigWs.send(JSON.stringify({ type: 'register', userId: String(currentUser.id), name: currentUser.name || '', token: profile.authToken }));
             }
         };
 
@@ -382,6 +388,11 @@ async function relayRegister({ name, email }) {
     const profile = { id, authToken, name, email: email || null, publicKeyJwk, privateKeyJwk, registeredAt: new Date().toISOString() };
     await new Promise(r => chrome.storage.local.set({ relayProfile: profile }, r));
     connectRelay();
+    // Now that a relay token exists, (re-)register for calls too — signaling
+    // registration is a no-op without one, so a socket opened before setup
+    // finished never got registered.
+    if (sigWs && sigWs.readyState === WebSocket.OPEN) sigWs.onopen();
+    else connectSignaling();
     return { ok: true, id };
 }
 
