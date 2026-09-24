@@ -617,8 +617,9 @@
                 <h2 style="color:#fff;font-size:18px;margin:0 0 8px">Token generated!</h2>
                 <p style="font-size:13px;color:#87898c;margin:0 0 20px;line-height:1.5">
                     An API token was created with the purpose
-                    <strong style="color:#dcddde">Canvas Messenger</strong>.
-                    Save it to finish setup.
+                    <strong style="color:#dcddde">Canvas Messenger</strong>
+                    on <strong style="color:#dcddde">${location.hostname}</strong>.
+                    Only save it if this is your school's real Canvas address.
                 </p>
                 <div style="background:#1e1f22;border-radius:6px;padding:10px 14px;
                     font-family:monospace;font-size:12px;color:#57f287;

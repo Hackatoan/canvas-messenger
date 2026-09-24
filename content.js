@@ -17,18 +17,30 @@
     const stored   = await new Promise(r => chrome.storage.local.get(['canvasUrl', 'apiToken'], r));
 
     if (isCanvas && !stored.canvasUrl) {
-        const env  = window.ENV || {};
-        const user = env.current_user || {};
-        await new Promise(r => chrome.storage.local.set({
-            canvasUrl: location.origin,
-            ...(user.id ? {
-                currentUser: {
-                    id:       user.id,
-                    name:     user.display_name || user.name || '',
-                    login_id: user.email || user.login_id || '',
-                },
-            } : {}),
-        }, r));
+        // detectCanvas() only looks at page-controlled signals (window.ENV,
+        // DOM markup), which any site can fake. Once canvasUrl is saved, every
+        // future API call — including the user's Canvas access token — is
+        // sent there, so require an explicit human confirmation before
+        // trusting this origin as "Canvas" rather than persisting silently.
+        const trusted = window.confirm(
+            `Canvas Messenger detected a Canvas login at "${location.hostname}".\n\n` +
+            `Connect Canvas Messenger to this site? Only confirm if this is your ` +
+            `school's real Canvas address.`
+        );
+        if (trusted) {
+            const env  = window.ENV || {};
+            const user = env.current_user || {};
+            await new Promise(r => chrome.storage.local.set({
+                canvasUrl: location.origin,
+                ...(user.id ? {
+                    currentUser: {
+                        id:       user.id,
+                        name:     user.display_name || user.name || '',
+                        login_id: user.email || user.login_id || '',
+                    },
+                } : {}),
+            }, r));
+        }
     }
 
     const canvasUrl = stored.canvasUrl || (isCanvas ? location.origin : null);
