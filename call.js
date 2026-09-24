@@ -67,6 +67,7 @@ async function init() {
     if (!localStream.getVideoTracks().length) {
         localCamOff.style.display = 'flex';
         btnCam.classList.add('off');
+        btnCam.setAttribute('aria-pressed', 'true');
         camOn = false;
     }
 
@@ -159,6 +160,7 @@ btnMic.addEventListener('click', () => {
     micOn = !micOn;
     track.enabled = micOn;
     btnMic.classList.toggle('off', !micOn);
+    btnMic.setAttribute('aria-pressed', String(!micOn));
     btnMic.title = micOn ? 'Mute' : 'Unmute';
 });
 
@@ -168,6 +170,7 @@ btnCam.addEventListener('click', () => {
     camOn = !camOn;
     track.enabled = camOn;
     btnCam.classList.toggle('off', !camOn);
+    btnCam.setAttribute('aria-pressed', String(!camOn));
     localCamOff.style.display = camOn ? 'none' : 'flex';
     btnCam.title = camOn ? 'Camera off' : 'Camera on';
 });
@@ -187,6 +190,7 @@ async function toggleScreenShare() {
         }
         localVideo.srcObject = localStream;
         btnScreen.classList.remove('screen-active');
+        btnScreen.setAttribute('aria-pressed', 'false');
         btnScreen.title = 'Share screen';
     } else {
         try {
@@ -196,6 +200,7 @@ async function toggleScreenShare() {
             if (sender) await sender.replaceTrack(videoTrack);
             localVideo.srcObject = screenStream;
             btnScreen.classList.add('screen-active');
+            btnScreen.setAttribute('aria-pressed', 'true');
             btnScreen.title = 'Stop sharing';
             videoTrack.addEventListener('ended', () => toggleScreenShare());
         } catch {}
