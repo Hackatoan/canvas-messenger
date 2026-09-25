@@ -445,10 +445,23 @@ async function syncRelayMessages() {
             { headers: { 'Authorization': `Bearer ${profile.authToken}` } });
         if (!res.ok) return;
         const msgs = await res.json();
+        if (!msgs.length) return;
         const contacts = await getRelayContacts();
+
+        // Catch-up syncs after being offline can carry many messages across
+        // many threads. The old code did a chrome.storage.local get+set per
+        // message (plus another get+set inside updateRelayThread) — each a
+        // serialized round trip to the storage backend. Batch every affected
+        // relayMsg_* key into one read and one write instead, and fold the
+        // relayThreads update into the same in-memory pass.
+        const threadIds = [...new Set(msgs.map(m => m.threadId))];
+        const stores = await new Promise(r => chrome.storage.local.get(threadIds.map(id => `relayMsg_${id}`), r));
+        const threadMap = new Map(threads.map(t => [t.id, t]));
+        const toWrite = {};
+
         for (const msg of msgs) {
             const key = `relayMsg_${msg.threadId}`;
-            const stored = await new Promise(r => chrome.storage.local.get(key, d => r(d[key] || [])));
+            const stored = stores[key] || (stores[key] = []);
             if (stored.find(m => m.id === msg.id)) continue;
             const fromMe = msg.senderId === profile.id;
             const otherId = fromMe ? msg.recipientId : msg.senderId;
@@ -458,8 +471,25 @@ async function syncRelayMessages() {
                 try { body = await relayDecrypt(msg.encryptedBody, msg.iv, profile.privateKeyJwk, contact.publicKeyJwk); } catch {}
             }
             stored.push({ id: msg.id, threadId: msg.threadId, senderId: msg.senderId, body, sentAt: msg.sentAt, fromMe, read: !!msg.readAt });
-            await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
-            await updateRelayThread(msg.threadId, otherId, body, msg.sentAt, !fromMe);
+            toWrite[key] = stored;
+
+            // Mirrors updateRelayThread()'s merge logic, applied in-memory.
+            const t = threadMap.get(msg.threadId);
+            if (t) {
+                t.lastMessage = body;
+                t.lastAt = msg.sentAt;
+                if (!fromMe) t.unreadCount = (t.unreadCount || 0) + 1;
+            } else {
+                threadMap.set(msg.threadId, {
+                    id: msg.threadId, contactId: otherId, contactName: contact?.name || 'Unknown',
+                    lastMessage: body, lastAt: msg.sentAt, unreadCount: fromMe ? 0 : 1,
+                });
+            }
+        }
+
+        if (Object.keys(toWrite).length) {
+            toWrite.relayThreads = [...threadMap.values()];
+            await new Promise(r => chrome.storage.local.set(toWrite, r));
         }
     } catch {}
 }
