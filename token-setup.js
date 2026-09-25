@@ -2,6 +2,18 @@
 // On the settings page: detects existing "Canvas Messenger" tokens and
 // offers to regenerate them. On other Canvas pages shows a setup chip.
 
+// ── Secret redaction ────────────────────────────────────────────────────────
+// This script logs dialog/page text to the console for setup diagnostics.
+// The exact DOM nodes it inspects (role="dialog" content) are also where
+// Canvas renders the freshly generated access token in plaintext for the
+// user to copy — never let that reach the console, since a long-lived
+// full-account-scope credential logged there is visible to anyone with
+// devtools open or screen-sharing during setup.
+const TOKEN_LIKE_RE = /[a-zA-Z0-9~_-]{20,}/g;
+function redact(str) {
+    return String(str).replace(TOKEN_LIKE_RE, m => `${m.slice(0, 4)}…[REDACTED]`);
+}
+
 (async () => {
     const stored = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
 
@@ -399,14 +411,14 @@
         await new Promise(r => setTimeout(r, 1500));
         const dialogState = [...document.querySelectorAll(
             '[role="dialog"], .ReactModal__Content'
-        )].map(d => d.textContent.replace(/\s+/g, ' ').trim().slice(0, 500));
+        )].map(d => redact(d.textContent.replace(/\s+/g, ' ').trim().slice(0, 500)));
         console.log('[CM token-setup] Dialog state after submit:', JSON.stringify(dialogState));
 
         const token = await waitForToken(10000);
         if (!token) {
             const dialogs = [...document.querySelectorAll(
                 '[role="dialog"], dialog, .ui-dialog, .ReactModal__Content, .modal-content'
-            )].map(d => d.textContent.replace(/\s+/g, ' ').trim().slice(0, 400));
+            )].map(d => redact(d.textContent.replace(/\s+/g, ' ').trim().slice(0, 400)));
             console.warn('[CM token-setup] Could not extract token. Visible dialogs:', JSON.stringify(dialogs));
             showOverlay('Could not capture the token — please copy it and paste into extension settings.', true);
             return;
