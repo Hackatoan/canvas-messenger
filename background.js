@@ -383,23 +383,46 @@ async function relayRegister({ name, email }) {
     // knew a target's canvasUserId+canvasUrl, neither of which is secret,
     // could steal their authToken and hijack their E2E publicKey). Brand new
     // accounts don't need it since there's nothing to prove ownership of yet.
+    // privateKey is sent so the relay can escrow it (in Firestore) the first
+    // time it sees this account — that's what lets a *future* device recover
+    // this exact keypair instead of minting its own and silently breaking
+    // everyone's E2E decryption. See cm-relay's /api/register.
     const res = await fetch(`${RELAY_API}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email: email || null, publicKey: JSON.stringify(publicKeyJwk),
+            privateKey: JSON.stringify(privateKeyJwk),
             canvasUserId: currentUser?.id ? String(currentUser.id) : null, canvasUrl: canvasUrl || null,
             canvasToken: apiToken || null }),
     });
     if (!res.ok) throw new Error(`Registration failed: ${res.status}`);
-    const { id, authToken } = await res.json();
-    const profile = { id, authToken, name, email: email || null, publicKeyJwk, privateKeyJwk, registeredAt: new Date().toISOString() };
-    await new Promise(r => chrome.storage.local.set({ relayProfile: profile }, r));
+    const { id, authToken, keypair, contacts } = await res.json();
+    // keypair present = this account already had an escrowed key on another
+    // device — use *that* one instead of the one we just generated locally,
+    // so old messages (encrypted for the escrowed public key) stay readable.
+    const { publicKeyJwk: pub, privateKeyJwk: priv } = keypair || { publicKeyJwk, privateKeyJwk };
+    const profile = { id, authToken, name, email: email || null, publicKeyJwk: pub, privateKeyJwk: priv, registeredAt: new Date().toISOString() };
+    // Escrowed either just now (fresh account) or already present (reclaim
+    // found one) — either way this device is covered, skip ensureKeyEscrow().
+    await new Promise(r => chrome.storage.local.set({ relayProfile: profile, relayKeyEscrowed: true }, r));
+    if (Array.isArray(contacts) && contacts.length) {
+        // Merge rather than overwrite: a reinstall on the *same* device may
+        // already have local contacts the synced snapshot doesn't (yet).
+        const local = await getRelayContacts();
+        const merged = [...local];
+        for (const c of contacts) if (!merged.find(m => m.id === c.id)) merged.push(c);
+        await new Promise(r => chrome.storage.local.set({ relayContacts: merged }, r));
+    }
     connectRelay();
     // Now that a relay token exists, (re-)register for calls too — signaling
     // registration is a no-op without one, so a socket opened before setup
     // finished never got registered.
     if (sigWs && sigWs.readyState === WebSocket.OPEN) sigWs.onopen();
     else connectSignaling();
+    // A fresh device has no local threads, so syncRelayMessages()'s epoch
+    // default backfills full history right away instead of waiting for the
+    // next poll alarm (up to 60s) — worth it once, register() is rare.
+    syncRelayMessages();
     return { ok: true, id };
 }
 
@@ -431,6 +454,16 @@ async function relayAddContact(contact) {
         const pubJwk = typeof contact.publicKey === 'string' ? JSON.parse(contact.publicKey) : contact.publicKey;
         contacts.push({ id: contact.id, name: contact.name, email: contact.email || null, publicKeyJwk: pubJwk });
         await new Promise(r => chrome.storage.local.set({ relayContacts: contacts }, r));
+        // Best-effort: so a future device restores this contact too (and can
+        // therefore decrypt its backfilled messages) instead of starting empty.
+        const profile = await getRelayProfile();
+        if (profile) {
+            fetch(`${RELAY_API}/sync-contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${profile.authToken}` },
+                body: JSON.stringify({ contacts }),
+            }).catch(() => {});
+        }
     }
     return { ok: true };
 }
@@ -671,9 +704,26 @@ chrome.action.onClicked.addListener(tab => {
     });
 });
 
+// One-time migration for devices already registered before key escrow
+// existed: silently re-runs registration once so this device's *existing*
+// keypair gets escrowed (not replaced — the relay only escrows when nothing
+// is stored yet). Without this, only a *second* device installed after this
+// feature shipped would end up as the escrowed copy, and it would win by
+// generating a fresh key — the exact key-rotation bug this feature fixes.
+async function ensureKeyEscrow() {
+    const { relayProfile, relayKeyEscrowed } = await new Promise(r =>
+        chrome.storage.local.get(['relayProfile', 'relayKeyEscrowed'], r));
+    if (!relayProfile || relayKeyEscrowed) return;
+    try {
+        await relayRegister({ name: relayProfile.name, email: relayProfile.email });
+        await new Promise(r => chrome.storage.local.set({ relayKeyEscrowed: true }, r));
+    } catch { /* Canvas session/token unavailable right now — retry next startup */ }
+}
+
 // initial badge on load
 updateBadge();
 connectSignaling();
 connectRelay();
 syncRelayMessages();
+ensureKeyEscrow();
 
