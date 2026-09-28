@@ -763,13 +763,21 @@ class CanvasMessenger {
     // ── Compose ────────────────────────────────────────────────────────────
 
     async renderCompose() {
+        if (!this.recipients) this.recipients = [];
+        // Courses rarely change mid-session and are already cached by the
+        // Classes tab / recipient search (see the `this.courses.length ||`
+        // guard used elsewhere in this file) — reuse that cache here too
+        // instead of re-fetching the full course list on every compose open.
+        if (this.courses.length) {
+            this.renderComposeForm();
+            return;
+        }
         this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading courses…</div>';
         try {
             this.courses = await API.getCourses();
         } catch {
             this.courses = [];
         }
-        if (!this.recipients) this.recipients = [];
         this.renderComposeForm();
     }
 
