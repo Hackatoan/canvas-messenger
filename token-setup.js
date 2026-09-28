@@ -651,6 +651,21 @@ function redact(str) {
 
         el.querySelector('#cm-confirm-cancel').addEventListener('click', () => el.remove());
         el.querySelector('#cm-confirm-save').addEventListener('click', async () => {
+            // This button is regular page-shared DOM — unlike content.js's
+            // canvasUrl gate (a native window.confirm()), a hosting page's own
+            // script could call .click() on it directly and skip real user
+            // interaction entirely, since isCanvas detection above only checks
+            // page-controlled signals (window.ENV, DOM markup) that any site
+            // can fake. A native confirm() can't be answered by page script —
+            // it blocks the whole tab until a real person responds — so gate
+            // the actual credential/domain persistence behind one, same as
+            // content.js does for the same class of risk (see PR #8).
+            const trusted = window.confirm(
+                `Save this Canvas Messenger token for "${location.hostname}"?\n\n` +
+                `Only confirm if this is your school's real Canvas address.`
+            );
+            if (!trusted) return;
+
             const env  = window.ENV || {};
             const user = env.current_user || {};
             await new Promise(r => chrome.storage.local.set({
