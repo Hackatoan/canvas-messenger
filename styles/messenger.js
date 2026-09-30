@@ -352,7 +352,7 @@ class CanvasMessenger {
             <div class="cm-input-area">
                 <div id="cm-snippet-preview-wrap"></div>
                 <div class="cm-input-box">
-                    <textarea id="cm-reply-box" placeholder="Message ${escHtml(withName)}…" rows="1"></textarea>
+                    <textarea id="cm-reply-box" placeholder="Message ${escHtml(withName)}…" aria-label="Message ${escHtml(withName)}" rows="1"></textarea>
                     <button class="cm-icon-btn cm-snippet-btn" id="cm-snippet-btn" title="Send screenshot">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
@@ -592,7 +592,7 @@ class CanvasMessenger {
             </div>
             <div class="cm-input-area">
                 <div class="cm-input-box">
-                    <textarea id="cm-class-input" placeholder="Message ${escHtml(course.course_code || course.name)}…" rows="1"></textarea>
+                    <textarea id="cm-class-input" placeholder="Message ${escHtml(course.course_code || course.name)}…" aria-label="Message ${escHtml(course.course_code || course.name)}" rows="1"></textarea>
                     <button class="cm-send-btn cm-class-send" title="Send">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
@@ -802,14 +802,14 @@ class CanvasMessenger {
                     ${this.courses.length ? `
                     <div style="display:flex;gap:8px">
                         <div class="cm-field" style="flex:2">
-                            <label>Filter by course <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
+                            <label for="cm-course-select">Filter by course <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
                             <select id="cm-course-select">
                                 <option value="">— Anyone on Canvas —</option>
                                 ${courseOptions}
                             </select>
                         </div>
                         <div class="cm-field" style="flex:1">
-                            <label>Role</label>
+                            <label for="cm-role-filter">Role</label>
                             <select id="cm-role-filter">
                                 <option value="">Any</option>
                                 <option value="student">Students</option>
@@ -824,11 +824,11 @@ class CanvasMessenger {
                         <div id="cm-search-results" style="display:none" class="cm-search-results"></div>
                     </div>
                     <div class="cm-field">
-                        <label>Subject</label>
+                        <label for="cm-subject">Subject</label>
                         <input type="text" id="cm-subject" placeholder="Message subject…" />
                     </div>
                     <div class="cm-field">
-                        <label>Message</label>
+                        <label for="cm-body">Message</label>
                         <textarea id="cm-body" placeholder="Write your message…" rows="5"></textarea>
                     </div>
                 </div>
@@ -881,7 +881,9 @@ class CanvasMessenger {
 
         const input = document.createElement('input');
         input.className = 'cm-recipient-input';
+        input.id = 'cm-recipient-input';
         input.placeholder = 'Search anyone on Canvas…';
+        input.setAttribute('aria-label', 'To');
         box.appendChild(input);
 
         const getContext = () => {
@@ -1148,15 +1150,15 @@ class CanvasMessenger {
                 </div>
                 <div class="cm-compose-body">
                     <div class="cm-field">
-                        <label>Name</label>
+                        <label for="cm-contact-name">Name</label>
                         <input type="text" id="cm-contact-name" placeholder="Full name…" value="${escHtml(contact?.name || '')}" />
                     </div>
                     <div class="cm-field">
-                        <label>Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
+                        <label for="cm-contact-email">Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
                         <input type="email" id="cm-contact-email" placeholder="email@example.com" value="${escHtml(contact?.email || '')}" />
                     </div>
                     <div class="cm-field">
-                        <label>Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
+                        <label for="cm-contact-notes">Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional)</span></label>
                         <textarea id="cm-contact-notes" placeholder="Class they were in, major, etc…" rows="3">${escHtml(contact?.notes || '')}</textarea>
                     </div>
                 </div>
@@ -1247,11 +1249,11 @@ class CanvasMessenger {
                         Messages are <strong>end-to-end encrypted</strong> — only you and your contact can read them.
                     </div>
                     <div class="cm-field">
-                        <label>Display Name</label>
+                        <label for="cm-relay-name">Display Name</label>
                         <input type="text" id="cm-relay-name" placeholder="Your full name…" />
                     </div>
                     <div class="cm-field">
-                        <label>School Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional — helps others find you)</span></label>
+                        <label for="cm-relay-email">School Email <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#87898c">(optional — helps others find you)</span></label>
                         <input type="email" id="cm-relay-email" placeholder="you@school.edu" />
                     </div>
                 </div>
@@ -1287,7 +1289,7 @@ class CanvasMessenger {
 
         const searchWrap = document.createElement('div');
         searchWrap.className = 'cm-relay-search-wrap';
-        searchWrap.innerHTML = `<input type="text" id="cm-relay-msg-search" placeholder="Search messages…" autocomplete="off" />`;
+        searchWrap.innerHTML = `<input type="text" id="cm-relay-msg-search" placeholder="Search messages…" aria-label="Search messages" autocomplete="off" />`;
         this.$convList.appendChild(searchWrap);
 
         const addBtn = document.createElement('button');
@@ -1470,7 +1472,7 @@ class CanvasMessenger {
             <div class="cm-typing-indicator" id="cm-relay-typing-indicator" style="display:none">${escHtml(contact.name)} is typing…</div>
             <div class="cm-input-area">
                 <div class="cm-input-box">
-                    <textarea id="cm-relay-input" placeholder="Message ${escHtml(contact.name)}… (encrypted)" rows="1"></textarea>
+                    <textarea id="cm-relay-input" placeholder="Message ${escHtml(contact.name)}… (encrypted)" aria-label="Message ${escHtml(contact.name)} (encrypted)" rows="1"></textarea>
                     <button class="cm-send-btn" id="cm-relay-send">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
@@ -1632,12 +1634,12 @@ class CanvasMessenger {
                         <div class="cm-relay-myid-value" id="cm-relay-copy-id">${escHtml(profile.id)}</div>
                     </div>
                     <div class="cm-field">
-                        <label>Search by name or school email</label>
+                        <label for="cm-relay-search-q">Search by name or school email</label>
                         <input type="text" id="cm-relay-search-q" placeholder="Type at least 2 characters…" autocomplete="off" />
                         <div id="cm-relay-search-results" style="display:none" class="cm-search-results"></div>
                     </div>
                     <div class="cm-field">
-                        <label>Or paste an invite link / token</label>
+                        <label for="cm-relay-invite-tok">Or paste an invite link / token</label>
                         <div style="display:flex;gap:8px">
                             <input type="text" id="cm-relay-invite-tok" placeholder="https://relay.hackatoa.com/invite/… or 32-char token"
                                 style="flex:1;background:#1e1f22;border:1px solid #1e1f22;border-radius:4px;color:#dcddde;font-size:13px;padding:8px 10px;outline:none;font-family:inherit;transition:border-color .15s" />
@@ -1645,7 +1647,7 @@ class CanvasMessenger {
                         </div>
                     </div>
                     <div class="cm-field">
-                        <label>Or share your own invite link</label>
+                        <label for="cm-relay-gen-invite">Or share your own invite link</label>
                         <button class="cm-btn-primary" id="cm-relay-gen-invite" style="width:100%;background:#404249;font-size:13px">Generate &amp; Copy Invite Link</button>
                     </div>
                 </div>
