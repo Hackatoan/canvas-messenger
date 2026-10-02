@@ -582,6 +582,7 @@ async function handleMessage(msg, sender = {}) {
         case 'accountStatus':        return accountStatus();
         case 'accountSignUp':        return accountSignUp(msg);
         case 'accountSignIn':        return accountSignIn(msg);
+        case 'accountSignInGoogle':  return accountSignInGoogle();
         case 'accountSignOut':       return accountSignOut();
         case 'accountUnlink':        return accountUnlink();
         case 'accountResetPassword': return accountResetPassword(msg);
@@ -752,8 +753,15 @@ const FB_ERRORS = {
     MISSING_PASSWORD: 'Enter a password.',
     USER_DISABLED: 'This account has been disabled.',
     TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts — try again in a few minutes.',
-    OPERATION_NOT_ALLOWED: 'Email/password sign-in isn\'t enabled for this project yet.',
+    OPERATION_NOT_ALLOWED: 'That sign-in method isn\'t enabled for this project yet.',
+    INVALID_IDP_RESPONSE: 'Google sign-in didn\'t validate — please try again.',
+    FEDERATED_USER_ID_ALREADY_LINKED: 'That Google account is already linked to a different account.',
 };
+
+// OAuth 2.0 *web* client that Firebase created for the Google provider (public
+// identifier). Its authorised redirect URIs must include this extension's
+// identity.getRedirectURL() for each browser — see the README.
+const GOOGLE_CLIENT_ID = '1008937995052-ai7553m8n34l3j5fkr4i3k3e22hbeaoc.apps.googleusercontent.com';
 
 let fbIdTokenCache = null; // { token, exp } — in-memory only, refetched after worker restarts
 
@@ -884,6 +892,12 @@ async function accountSignUp({ email, password }) {
 async function accountSignIn({ email, password }) {
     const data = await fbIdentity('signInWithPassword', { email: String(email || '').trim(), password, returnSecureToken: true });
     await fbSaveSession(data);
+    return accountAfterSignIn();
+}
+
+// Shared by every sign-in method once a Firebase session exists: restore this
+// device from the account, or back it up if the account has nothing yet.
+async function accountAfterSignIn() {
     const r = await relayAccountCall('login');
     if (r.status === 404) {
         // Valid sign-in with nothing backed up yet: back up this device if it has a Canvas connection.
@@ -895,6 +909,56 @@ async function accountSignIn({ email, password }) {
     const { fbSession } = await storageGet('fbSession');
     await storageSet({ fbSession: { ...fbSession, linked: true } });
     return { ok: true, linked: true, restored: true, user };
+}
+
+function randomHex(bytes) {
+    return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function jwtPayload(jwt) {
+    const part = String(jwt).split('.')[1] || '';
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(decodeURIComponent(escape(atob(b64 + '='.repeat((4 - b64.length % 4) % 4)))));
+}
+
+// Sign in with Google: implicit OAuth flow in a browser-managed popup returns
+// a Google ID token, which Firebase exchanges for a normal Firebase session.
+async function accountSignInGoogle() {
+    requireFirebase();
+    if (!chrome.identity?.launchWebAuthFlow) throw new Error('Google sign-in isn\'t available in this browser.');
+    const redirectUri = chrome.identity.getRedirectURL();
+    const nonce = randomHex(16), state = randomHex(16);
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID, response_type: 'id_token', redirect_uri: redirectUri,
+        scope: 'openid email profile', nonce, state, prompt: 'select_account',
+    });
+    const responseUrl = await new Promise((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, url => {
+            if (chrome.runtime.lastError || !url) return reject(new Error('Google sign-in was cancelled or blocked.'));
+            resolve(url);
+        });
+    });
+    const frag = new URLSearchParams(new URL(responseUrl).hash.replace(/^#/, ''));
+    if (frag.get('error')) throw new Error(`Google sign-in failed (${frag.get('error')}).`);
+    // Reject a response that isn't for the request we just made (CSRF / replay).
+    if (frag.get('state') !== state) throw new Error('Google sign-in response didn\'t match the request — please try again.');
+    const idToken = frag.get('id_token');
+    if (!idToken) throw new Error('Google didn\'t return a sign-in token.');
+    let payload;
+    try { payload = jwtPayload(idToken); } catch { throw new Error('Google returned an unreadable token.'); }
+    if (payload.nonce !== nonce) throw new Error('Google sign-in response didn\'t match the request — please try again.');
+
+    // requestUri only has to be a URL on an authorised domain; localhost always is.
+    const data = await fbIdentity('signInWithIdp', {
+        postBody: `id_token=${encodeURIComponent(idToken)}&providerId=google.com`,
+        requestUri: 'http://localhost', returnIdpCredential: true, returnSecureToken: true,
+    });
+    if (!data.idToken) {
+        // Same email already exists under a password account: don't silently merge.
+        throw new Error(`${data.email || 'That email'} already has a password account. Sign in with your password once; Google sign-in will work after that.`);
+    }
+    await fbSaveSession(data);
+    return accountAfterSignIn();
 }
 
 async function accountSignOut() {

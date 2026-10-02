@@ -98,7 +98,7 @@ const acctWho         = document.getElementById('account-who');
 const acctEmail       = document.getElementById('account-email');
 const acctPassword    = document.getElementById('account-password');
 const acctStatus      = document.getElementById('account-status');
-const acctButtons     = ['account-signin-btn', 'account-signup-btn', 'account-reset-btn', 'account-signout-btn', 'account-unlink-btn']
+const acctButtons     = ['account-google-btn', 'account-signin-btn', 'account-signup-btn', 'account-reset-btn', 'account-signout-btn', 'account-unlink-btn']
     .map(id => document.getElementById(id));
 
 function acctMsg(msg, type) {
@@ -161,6 +161,15 @@ document.getElementById('account-signin-btn').addEventListener('click', () => ac
     if (r.restored)      acctMsg('Signed in — your Canvas connection was restored on this device.', 'success');
     else if (r.linked)   acctMsg('Signed in and backed up this device\'s Canvas connection.', 'success');
     else                 acctMsg(`Signed in. ${r.notice || ''}`.trim(), 'info');
+    reloadSettingsFields();
+    await refreshAccount();
+}));
+
+document.getElementById('account-google-btn').addEventListener('click', () => acctRun(async () => {
+    const r = await send({ action: 'accountSignInGoogle' });
+    if (r.restored)      acctMsg('Signed in with Google — your Canvas connection was restored on this device.', 'success');
+    else if (r.linked)   acctMsg('Signed in with Google and backed up this device\'s Canvas connection.', 'success');
+    else                 acctMsg(`Signed in with Google. ${r.notice || ''}`.trim(), 'info');
     reloadSettingsFields();
     await refreshAccount();
 }));

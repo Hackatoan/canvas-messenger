@@ -13,7 +13,7 @@ function deepStub() { // any chrome.a.b.c(...) call is a harmless no-op
     return new Proxy(f, { get: (t, k) => (k in t ? t[k] : (k === 'then' ? undefined : deepStub())), apply: () => undefined });
 }
 
-function load({ apiKey = 'test-key', routes }) {
+function load({ apiKey = 'test-key', routes, webAuth }) {
     const store = {};
     const calls = [];
     const chrome = deepStub();
@@ -28,6 +28,16 @@ function load({ apiKey = 'test-key', routes }) {
     } };
     chrome.runtime = { onMessage: { addListener: noop }, onInstalled: { addListener: noop }, onStartup: { addListener: noop }, sendMessage: noop, openOptionsPage: noop };
     chrome.tabs = { query: async () => [], sendMessage: async () => {} };
+    // identity.launchWebAuthFlow: `webAuth(authUrl)` returns the redirect URL (or null = user closed the popup)
+    chrome.identity = {
+        getRedirectURL: () => 'https://fakeextid.chromiumapp.org/',
+        launchWebAuthFlow: ({ url }, cb) => {
+            const out = webAuth ? webAuth(new URL(url)) : null;
+            chrome.runtime.lastError = out ? undefined : { message: 'The user did not approve access.' };
+            cb(out || undefined);
+            chrome.runtime.lastError = undefined;
+        },
+    };
     class WS { constructor() { this.readyState = 0; } close() {} send() {} }
     WS.OPEN = 1; WS.CONNECTING = 0;
     const fetchFake = async (url, opts = {}) => {
@@ -46,7 +56,7 @@ function load({ apiKey = 'test-key', routes }) {
     // would otherwise keep the test process alive forever.
     const inert = () => 0;
     const api = new Function('chrome', 'WebSocket', 'fetch', 'crypto', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        src + '\nreturn { accountSignUp, accountSignIn, accountSignOut, accountStatus, accountUnlink, accountSyncToken, accountResetPassword };')
+        src + '\nreturn { accountSignUp, accountSignIn, accountSignInGoogle, accountSignOut, accountStatus, accountUnlink, accountSyncToken, accountResetPassword };')
         (chrome, WS, fetchFake, globalThis.crypto, inert, inert, inert, inert);
     return { api, store, calls };
 }
@@ -181,4 +191,84 @@ test('sign-out forgets the session only', async () => {
 test('token sync is a quiet no-op unless the account is linked', async () => {
     const { api } = load({ routes: [] });
     assert.deepEqual(await api.accountSyncToken(), { ok: true, skipped: true });
+});
+
+// ── Sign in with Google ──────────────────────────────────────────────────────
+const b64url = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+const fakeJwt = payload => `${b64url({ alg: 'RS256' })}.${b64url(payload)}.sig`;
+// A well-behaved Google: echoes state, puts the request's nonce in the token.
+const goodGoogle = (over = {}) => authUrl => {
+    const q = authUrl.searchParams;
+    const frag = new URLSearchParams({ id_token: fakeJwt({ nonce: q.get('nonce'), email: 'a@gmail.com', ...over.payload }), state: q.get('state'), ...over.frag });
+    return `https://fakeextid.chromiumapp.org/#${frag}`;
+};
+const idpRoutes = [
+    ['accounts:signInWithIdp', (u, o) => ({ status: 200, body: { idToken: 'ID1', refreshToken: 'RT1', localId: 'uidG', email: 'a@gmail.com', expiresIn: '3600', isNewUser: false, _post: JSON.parse(o.body) } })],
+    ['/account/login', () => ({ status: 200, body: { id: 'u1', authToken: 'RELAY', name: 'Alice', keypair: KEYPAIR, contacts: [], canvas: { url: 'https://s.edu', userId: '1', token: 'CT' } } })],
+];
+
+test('google: sends a correct OAuth request and restores the device after Firebase exchange', async () => {
+    let authUrl, idpBody;
+    const { api, store } = load({
+        routes: [['accounts:signInWithIdp', (u, o) => { idpBody = JSON.parse(o.body); return idpRoutes[0][1](u, o); }], idpRoutes[1]],
+        webAuth: u => { authUrl = u; return goodGoogle()(u); },
+    });
+    const r = await api.accountSignInGoogle();
+    const q = authUrl.searchParams;
+    assert.equal(authUrl.origin + authUrl.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
+    assert.match(q.get('client_id'), /^1008937995052-.*\.apps\.googleusercontent\.com$/);
+    assert.equal(q.get('response_type'), 'id_token');
+    assert.equal(q.get('redirect_uri'), 'https://fakeextid.chromiumapp.org/');
+    assert.ok(q.get('nonce').length >= 16 && q.get('state').length >= 16);
+    assert.match(idpBody.postBody, /providerId=google\.com/);
+    assert.equal(r.restored, true);
+    assert.equal(store.apiToken, 'CT');
+    assert.equal(store.fbSession.uid, 'uidG');
+    assert.equal(store.fbSession.linked, true);
+});
+
+test('google: nonce and state are fresh per attempt', async () => {
+    const seen = [];
+    const { api } = load({ routes: idpRoutes, webAuth: u => { seen.push([u.searchParams.get('nonce'), u.searchParams.get('state')]); return goodGoogle()(u); } });
+    await api.accountSignInGoogle(); await api.accountSignInGoogle();
+    assert.notEqual(seen[0][0], seen[1][0]); assert.notEqual(seen[0][1], seen[1][1]);
+});
+
+test('google: a response with the wrong state is rejected before Firebase is called', async () => {
+    let fbCalled = false;
+    const { api } = load({ routes: [['accounts:signInWithIdp', () => { fbCalled = true; return { status: 200, body: {} }; }]], webAuth: goodGoogle({ frag: { state: 'attacker' } }) });
+    await assert.rejects(api.accountSignInGoogle(), /didn't match the request/);
+    assert.equal(fbCalled, false);
+});
+
+test('google: a replayed token with the wrong nonce is rejected before Firebase is called', async () => {
+    let fbCalled = false;
+    const { api } = load({ routes: [['accounts:signInWithIdp', () => { fbCalled = true; return { status: 200, body: {} }; }]], webAuth: goodGoogle({ payload: { nonce: 'old-nonce' } }) });
+    await assert.rejects(api.accountSignInGoogle(), /didn't match the request/);
+    assert.equal(fbCalled, false);
+});
+
+test('google: closing the popup, an OAuth error, or a missing token fail cleanly', async () => {
+    await assert.rejects(load({ routes: [], webAuth: () => null }).api.accountSignInGoogle(), /cancelled or blocked/);
+    await assert.rejects(load({ routes: [], webAuth: u => `https://x/#error=access_denied&state=${u.searchParams.get('state')}` }).api.accountSignInGoogle(), /access_denied/);
+    await assert.rejects(load({ routes: [], webAuth: u => `https://x/#state=${u.searchParams.get('state')}` }).api.accountSignInGoogle(), /didn't return a sign-in token/);
+});
+
+test('google: an email that already has a password account is not silently merged', async () => {
+    const { api, store } = load({ routes: [['accounts:signInWithIdp', () => ({ status: 200, body: { needConfirmation: true, email: 'a@gmail.com' } })]], webAuth: goodGoogle() });
+    await assert.rejects(api.accountSignInGoogle(), /already has a password account/);
+    assert.equal(store.fbSession, undefined);
+});
+
+test('google: a new Google account on a connected device backs the Canvas token up', async () => {
+    let linked = false;
+    const { api, store } = load({
+        routes: [idpRoutes[0], ['/account/login', () => ({ status: 404, body: { error: 'no_account' } })], ['/account/link', () => { linked = true; return { status: 200, body: { ok: true } }; }]],
+        webAuth: goodGoogle(),
+    });
+    store.canvasUrl = 'https://s.edu'; store.apiToken = 't'; store.currentUser = { id: 1, name: 'A' };
+    store.relayProfile = { id: 'u1', authToken: 'r', name: 'A', ...KEYPAIR };
+    const r = await api.accountSignInGoogle();
+    assert.equal(linked, true);
+    assert.deepEqual({ linked: r.linked, restored: r.restored }, { linked: true, restored: false });
 });
