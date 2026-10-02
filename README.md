@@ -24,7 +24,7 @@ JavaScript · Browser Extension (Chrome / Firefox) · WebRTC
 
 ## Development
 
-Run the tests with `npm test`. To enable accounts in a build, set `FIREBASE_API_KEY` at the top of the accounts section in `background.js` (the Firebase project's web API key, a public identifier) and make sure Email/Password sign-in is enabled in the Firebase console. The relay needs `ACCOUNT_ENC_KEY` (32 random bytes, base64) set — see [cm-relay](https://github.com/Hackatoan/cm-relay).
+Run the tests with `npm test`. Accounts use the Firebase project `canvas-messagener` (`FIREBASE_API_KEY` at the top of the accounts section in `background.js` is its public web API key; Email/Password sign-in must be enabled in the Firebase console). Setting the key to an empty string hides the feature. The relay needs `ACCOUNT_ENC_KEY` (32 random bytes, base64) set — see [cm-relay](https://github.com/Hackatoan/cm-relay).
 
 Load the extension unpacked from your browser's extensions page (developer mode). See the setup notes for connecting your Canvas API token.
 

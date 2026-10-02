@@ -41,7 +41,7 @@ function load({ apiKey = 'test-key', routes }) {
         return { ok: false, status: 404, json: async () => ({}) };
     };
     let src = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
-    src = src.replace("const FIREBASE_API_KEY = '';", `const FIREBASE_API_KEY = '${apiKey}';`);
+    src = src.replace(/const FIREBASE_API_KEY = '[^']*';/, `const FIREBASE_API_KEY = '${apiKey}';`);
     // Inert timers: background.js arms reconnect/poll timers at load, which
     // would otherwise keep the test process alive forever.
     const inert = () => 0;

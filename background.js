@@ -734,9 +734,11 @@ async function ensureKeyEscrow() {
 // relay verifies the resulting ID token and does all the storing. See
 // cm-relay's account.js.
 
-// Public identifier for the Firebase project (Project settings → General →
-// Web API key). Not a secret. Empty = accounts disabled in this build.
-const FIREBASE_API_KEY = '';
+// Public identifier for the Firebase project `canvas-messagener` (Project
+// settings → General → Web API key). Not a secret — it ships in every web app
+// that uses Firebase; access is controlled by Auth + the relay, not this key.
+// Empty = accounts disabled in this build.
+const FIREBASE_API_KEY = 'AIzaSyDTVyAeIS0rgi9-QkbBPJaSVN5TGUObccU';
 const FB_IDENTITY = 'https://identitytoolkit.googleapis.com/v1/accounts';
 const FB_SECURETOKEN = 'https://securetoken.googleapis.com/v1/token';
 
