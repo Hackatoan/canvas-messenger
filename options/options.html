@@ -138,6 +138,15 @@
   }
   .user-name { font-size: 14px; font-weight: 600; color: #f2f3f5; }
   .user-sub  { font-size: 12px; color: #87898c; }
+  details.account { background: #1e1f22; border-radius: 6px; padding: 14px 16px; margin-bottom: 24px; }
+  details.account summary { cursor: pointer; font-size: 14px; font-weight: 600; color: #f2f3f5; }
+  details.account summary:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
+  details.account .account-body { margin-top: 14px; }
+  .account-who { font-size: 13px; color: #b5bac1; margin-bottom: 12px; line-height: 1.5; }
+  .link-btn { background: none; border: none; color: #5865f2; font: inherit; font-size: 12px; cursor: pointer; padding: 0; margin-top: 10px; }
+  .link-btn:hover { text-decoration: underline; }
+  .status.info { background: rgba(88,101,242,0.15); border: 1px solid rgba(88,101,242,0.3); color: #c9cdfb; display: block; }
+  .status.inline { margin-top: 12px; }
 </style>
 </head>
 <body>
@@ -154,6 +163,43 @@
         </div>
     </div>
 
+    <details class="account" id="account-box" hidden>
+        <summary>Account — sync to your other devices</summary>
+        <div class="account-body">
+            <div id="account-signed-out">
+                <p class="field-hint" style="margin-bottom:14px">
+                    Create an account to back up your Canvas connection and encryption keys, so a new
+                    browser or computer signs in with an email and password instead of redoing the token steps.
+                </p>
+                <div class="field">
+                    <label for="account-email">Email</label>
+                    <input type="email" id="account-email" autocomplete="username" placeholder="you@school.edu" />
+                </div>
+                <div class="field">
+                    <label for="account-password">Password</label>
+                    <input type="password" id="account-password" autocomplete="current-password" placeholder="At least 6 characters" />
+                </div>
+                <div class="btn-row">
+                    <button class="btn-primary" id="account-signin-btn" type="button">Sign in</button>
+                    <button class="btn-secondary" id="account-signup-btn" type="button">Create account</button>
+                </div>
+                <button class="link-btn" id="account-reset-btn" type="button">Forgot password?</button>
+            </div>
+            <div id="account-signed-in" hidden>
+                <p class="account-who" id="account-who"></p>
+                <div class="btn-row">
+                    <button class="btn-secondary" id="account-signout-btn" type="button">Sign out</button>
+                    <button class="btn-secondary" id="account-unlink-btn" type="button">Delete cloud copy</button>
+                </div>
+                <p class="field-hint" style="margin-top:10px">
+                    “Sign out” only forgets the sign-in on this device. “Delete cloud copy” also removes the
+                    backed-up Canvas token from the relay.
+                </p>
+            </div>
+            <div class="status inline" id="account-status" role="status" aria-live="polite"></div>
+        </div>
+    </details>
+
     <div class="field">
         <label for="canvas-url">Canvas URL</label>
         <input type="url" id="canvas-url" placeholder="https://yourschool.instructure.com" />
@@ -165,7 +211,7 @@
         <input type="password" id="api-token" placeholder="Paste your Canvas API token…" />
         <p class="field-hint">
             Generate at: <strong>Canvas → Account → Settings → New Access Token</strong><br>
-            This is stored locally on your device only.
+            Stored on this device. Create an account above to back it up for your other devices.
         </p>
     </div>
 
@@ -179,7 +225,7 @@
     <hr class="divider">
 
     <div style="font-size:12px;color:#87898c;line-height:1.6">
-        <strong style="color:#b5bac1">Privacy notice:</strong> Your API token is stored locally in your browser and never leaves your device. All requests go directly to your school's Canvas instance.
+        <strong style="color:#b5bac1">Privacy notice:</strong> By default your API token is stored locally in your browser and never leaves your device; requests go directly to your school's Canvas instance. If you create an account, an encrypted copy of your token and your message-encryption keys are stored on the Canvas Messenger relay so new devices can restore them. You can delete that copy at any time.
     </div>
 </div>
 <script src="options.js"></script>
