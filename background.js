@@ -579,6 +579,14 @@ async function handleMessage(msg, sender = {}) {
         case 'uploadFile':         return { fileId: await uploadCanvasFile(msg.dataUrl, msg.filename) };
         case 'sendReplyWithAttachment': return sendReplyWithAttachment(msg.convId, msg.body, msg.attachmentIds);
         case 'relayRegister':    return relayRegister(msg);
+        case 'accountStatus':        return accountStatus();
+        case 'accountSignUp':        return accountSignUp(msg);
+        case 'accountSignIn':        return accountSignIn(msg);
+        case 'accountSignInGoogle':  return accountSignInGoogle();
+        case 'accountSignOut':       return accountSignOut();
+        case 'accountUnlink':        return accountUnlink();
+        case 'accountResetPassword': return accountResetPassword(msg);
+        case 'accountSyncToken':     return accountSyncToken();
         case 'relayGetProfile':  return getRelayProfile();
         case 'relayGetThreads':  return new Promise(r => chrome.storage.local.get('relayThreads', d => r(d.relayThreads || [])));
         case 'relayGetMessages': return new Promise(r => chrome.storage.local.get(`relayMsg_${msg.threadId}`, d => r(d[`relayMsg_${msg.threadId}`] || [])));
@@ -718,6 +726,271 @@ async function ensureKeyEscrow() {
         await relayRegister({ name: relayProfile.name, email: relayProfile.email });
         await new Promise(r => chrome.storage.local.set({ relayKeyEscrowed: true }, r));
     } catch { /* Canvas session/token unavailable right now — retry next startup */ }
+}
+
+// ── Accounts (Firebase Auth) ──────────────────────────────────────────────────
+// Sign in with email + password so a new device can restore the Canvas token,
+// relay login and E2E keys instead of redoing the Canvas token flow. The
+// extension talks to Firebase Auth's REST API directly (no SDK to bundle); the
+// relay verifies the resulting ID token and does all the storing. See
+// cm-relay's account.js.
+
+// Public identifier for the Firebase project `canvas-messagener` (Project
+// settings → General → Web API key). Not a secret — it ships in every web app
+// that uses Firebase; access is controlled by Auth + the relay, not this key.
+// Empty = accounts disabled in this build.
+const FIREBASE_API_KEY = 'AIzaSyDTVyAeIS0rgi9-QkbBPJaSVN5TGUObccU';
+const FB_IDENTITY = 'https://identitytoolkit.googleapis.com/v1/accounts';
+const FB_SECURETOKEN = 'https://securetoken.googleapis.com/v1/token';
+
+const FB_ERRORS = {
+    EMAIL_EXISTS: 'An account with that email already exists — sign in instead.',
+    INVALID_LOGIN_CREDENTIALS: 'Wrong email or password.',
+    INVALID_PASSWORD: 'Wrong email or password.',
+    EMAIL_NOT_FOUND: 'Wrong email or password.',
+    INVALID_EMAIL: 'That email address doesn\'t look right.',
+    WEAK_PASSWORD: 'Password must be at least 6 characters.',
+    MISSING_PASSWORD: 'Enter a password.',
+    USER_DISABLED: 'This account has been disabled.',
+    TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts — try again in a few minutes.',
+    OPERATION_NOT_ALLOWED: 'That sign-in method isn\'t enabled for this project yet.',
+    INVALID_IDP_RESPONSE: 'Google sign-in didn\'t validate — please try again.',
+    FEDERATED_USER_ID_ALREADY_LINKED: 'That Google account is already linked to a different account.',
+};
+
+// OAuth 2.0 *web* client that Firebase created for the Google provider (public
+// identifier). Its authorised redirect URIs must include this extension's
+// identity.getRedirectURL() for each browser — see the README.
+const GOOGLE_CLIENT_ID = '1008937995052-ai7553m8n34l3j5fkr4i3k3e22hbeaoc.apps.googleusercontent.com';
+
+let fbIdTokenCache = null; // { token, exp } — in-memory only, refetched after worker restarts
+
+const storageGet = keys => new Promise(r => chrome.storage.local.get(keys, r));
+const storageSet = obj => new Promise(r => chrome.storage.local.set(obj, r));
+const storageRemove = keys => new Promise(r => chrome.storage.local.remove(keys, r));
+
+function requireFirebase() {
+    if (!FIREBASE_API_KEY) throw new Error('Accounts aren\'t enabled in this build yet.');
+}
+
+async function fbIdentity(endpoint, body) {
+    requireFirebase();
+    const res = await fetch(`${FB_IDENTITY}:${endpoint}?key=${FIREBASE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        const code = String(data?.error?.message || '').split(' ')[0];
+        throw new Error(FB_ERRORS[code] || `Account request failed (${code || res.status}).`);
+    }
+    return data;
+}
+
+async function fbSaveSession(data, extra = {}) {
+    const prev = (await storageGet('fbSession')).fbSession || {};
+    const session = { ...prev, email: data.email || prev.email, uid: data.localId || prev.uid, refreshToken: data.refreshToken, ...extra };
+    await storageSet({ fbSession: session });
+    fbIdTokenCache = data.idToken
+        ? { token: data.idToken, exp: Date.now() + (Number(data.expiresIn) || 3600) * 1000 - 60_000 }
+        : null;
+    return session;
+}
+
+async function fbGetIdToken() {
+    if (fbIdTokenCache && Date.now() < fbIdTokenCache.exp) return fbIdTokenCache.token;
+    requireFirebase();
+    const { fbSession } = await storageGet('fbSession');
+    if (!fbSession?.refreshToken) throw new Error('Not signed in.');
+    const res = await fetch(`${FB_SECURETOKEN}?key=${FIREBASE_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(fbSession.refreshToken)}`,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        await storageRemove('fbSession'); // refresh token revoked/expired: force a fresh sign-in
+        fbIdTokenCache = null;
+        throw new Error('Your sign-in expired — please sign in again.');
+    }
+    await storageSet({ fbSession: { ...fbSession, refreshToken: data.refresh_token || fbSession.refreshToken } });
+    fbIdTokenCache = { token: data.id_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 - 60_000 };
+    return fbIdTokenCache.token;
+}
+
+async function relayAccountCall(path, { bearer, body } = {}) {
+    const headers = { 'Content-Type': 'application/json', 'X-Firebase-Token': await fbGetIdToken() };
+    if (bearer) headers.Authorization = `Bearer ${bearer}`;
+    const res = await fetch(`${RELAY_API}/account/${path}`, { method: 'POST', headers, body: JSON.stringify(body || {}) });
+    const json = await res.json().catch(() => ({}));
+    return { status: res.status, ok: res.ok, json };
+}
+
+// Push this device's Canvas token (and, if needed, its relay registration) to
+// the signed-in account. Idempotent — also used to refresh a rotated token.
+async function accountLink() {
+    const { canvasUrl, apiToken, currentUser, fbSession } = await storageGet(['canvasUrl', 'apiToken', 'currentUser', 'fbSession']);
+    if (!fbSession) throw new Error('Not signed in.');
+    if (!canvasUrl || !apiToken || !currentUser?.id) throw new Error('Connect to Canvas first, then your account can back it up.');
+    let profile = await getRelayProfile();
+    if (!profile) {
+        await relayRegister({ name: currentUser.name || currentUser.login_id || 'Canvas user', email: fbSession.email });
+        profile = await getRelayProfile();
+    }
+    const r = await relayAccountCall('link', {
+        bearer: profile.authToken,
+        body: { canvasUrl, canvasUserId: String(currentUser.id), canvasToken: apiToken },
+    });
+    if (!r.ok) throw new Error(r.json?.error || `Couldn\'t back up to your account (${r.status}).`);
+    await storageSet({ fbSession: { ...fbSession, linked: true } });
+    return { ok: true, linked: true };
+}
+
+// Apply what the relay returned for a sign-in on a (possibly brand-new) device.
+async function accountRestore(d) {
+    if (!d.canvas?.token || !d.canvas?.url) throw new Error('Your account has no saved Canvas connection yet. Connect on your other device first.');
+    if (!d.keypair?.publicKeyJwk || !d.keypair?.privateKeyJwk) throw new Error('Your account has no saved encryption keys. Open the extension on your original device once, then try again.');
+
+    let currentUser = { id: d.canvas.userId, name: d.name };
+    try {
+        const cu = await fetch(`${d.canvas.url.replace(/\/$/, '')}/api/v1/users/self`, { headers: { Authorization: `Bearer ${d.canvas.token}` } });
+        if (cu.ok) currentUser = await cu.json();
+    } catch { /* offline or token revoked — fall back to the id/name we have */ }
+
+    const profile = {
+        id: d.id, authToken: d.authToken, name: d.name, email: d.email || null,
+        publicKeyJwk: d.keypair.publicKeyJwk, privateKeyJwk: d.keypair.privateKeyJwk,
+        registeredAt: new Date().toISOString(),
+    };
+    await storageSet({ canvasUrl: d.canvas.url, apiToken: d.canvas.token, currentUser, relayProfile: profile, relayKeyEscrowed: true });
+    if (Array.isArray(d.contacts) && d.contacts.length) {
+        const local = await getRelayContacts();
+        const merged = [...local];
+        for (const c of d.contacts) if (!merged.find(m => m.id === c.id)) merged.push(c);
+        await storageSet({ relayContacts: merged });
+    }
+    connectRelay();
+    if (sigWs && sigWs.readyState === WebSocket.OPEN) sigWs.onopen(); else connectSignaling();
+    syncRelayMessages();
+    updateBadge();
+    return currentUser;
+}
+
+async function accountSignUp({ email, password }) {
+    const data = await fbIdentity('signUp', { email: String(email || '').trim(), password, returnSecureToken: true });
+    await fbSaveSession(data);
+    try {
+        await accountLink();
+        return { ok: true, linked: true };
+    } catch (e) {
+        // Account exists now; backing up needs a Canvas connection first.
+        return { ok: true, linked: false, notice: e.message };
+    }
+}
+
+async function accountSignIn({ email, password }) {
+    const data = await fbIdentity('signInWithPassword', { email: String(email || '').trim(), password, returnSecureToken: true });
+    await fbSaveSession(data);
+    return accountAfterSignIn();
+}
+
+// Shared by every sign-in method once a Firebase session exists: restore this
+// device from the account, or back it up if the account has nothing yet.
+async function accountAfterSignIn() {
+    const r = await relayAccountCall('login');
+    if (r.status === 404) {
+        // Valid sign-in with nothing backed up yet: back up this device if it has a Canvas connection.
+        try { await accountLink(); return { ok: true, linked: true, restored: false }; }
+        catch (e) { return { ok: true, linked: false, restored: false, notice: e.message }; }
+    }
+    if (!r.ok) throw new Error(r.json?.error || `Sign-in failed (${r.status}).`);
+    const user = await accountRestore(r.json);
+    const { fbSession } = await storageGet('fbSession');
+    await storageSet({ fbSession: { ...fbSession, linked: true } });
+    return { ok: true, linked: true, restored: true, user };
+}
+
+function randomHex(bytes) {
+    return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function jwtPayload(jwt) {
+    const part = String(jwt).split('.')[1] || '';
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(decodeURIComponent(escape(atob(b64 + '='.repeat((4 - b64.length % 4) % 4)))));
+}
+
+// Sign in with Google: implicit OAuth flow in a browser-managed popup returns
+// a Google ID token, which Firebase exchanges for a normal Firebase session.
+async function accountSignInGoogle() {
+    requireFirebase();
+    if (!chrome.identity?.launchWebAuthFlow) throw new Error('Google sign-in isn\'t available in this browser.');
+    const redirectUri = chrome.identity.getRedirectURL();
+    const nonce = randomHex(16), state = randomHex(16);
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID, response_type: 'id_token', redirect_uri: redirectUri,
+        scope: 'openid email profile', nonce, state, prompt: 'select_account',
+    });
+    const responseUrl = await new Promise((resolve, reject) => {
+        chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, url => {
+            if (chrome.runtime.lastError || !url) return reject(new Error('Google sign-in was cancelled or blocked.'));
+            resolve(url);
+        });
+    });
+    const frag = new URLSearchParams(new URL(responseUrl).hash.replace(/^#/, ''));
+    if (frag.get('error')) throw new Error(`Google sign-in failed (${frag.get('error')}).`);
+    // Reject a response that isn't for the request we just made (CSRF / replay).
+    if (frag.get('state') !== state) throw new Error('Google sign-in response didn\'t match the request — please try again.');
+    const idToken = frag.get('id_token');
+    if (!idToken) throw new Error('Google didn\'t return a sign-in token.');
+    let payload;
+    try { payload = jwtPayload(idToken); } catch { throw new Error('Google returned an unreadable token.'); }
+    if (payload.nonce !== nonce) throw new Error('Google sign-in response didn\'t match the request — please try again.');
+
+    // requestUri only has to be a URL on an authorised domain; localhost always is.
+    const data = await fbIdentity('signInWithIdp', {
+        postBody: `id_token=${encodeURIComponent(idToken)}&providerId=google.com`,
+        requestUri: 'http://localhost', returnIdpCredential: true, returnSecureToken: true,
+    });
+    if (!data.idToken) {
+        // Same email already exists under a password account: don't silently merge.
+        throw new Error(`${data.email || 'That email'} already has a password account. Sign in with your password once; Google sign-in will work after that.`);
+    }
+    await fbSaveSession(data);
+    return accountAfterSignIn();
+}
+
+async function accountSignOut() {
+    fbIdTokenCache = null;
+    await storageRemove('fbSession'); // local Canvas/relay data stays; the cloud copy is untouched
+    return { ok: true };
+}
+
+async function accountUnlink() {
+    const r = await relayAccountCall('unlink');
+    if (!r.ok) throw new Error(r.json?.error || `Couldn\'t remove the cloud copy (${r.status}).`);
+    const { fbSession } = await storageGet('fbSession');
+    if (fbSession) await storageSet({ fbSession: { ...fbSession, linked: false } });
+    return { ok: true };
+}
+
+async function accountStatus() {
+    const { fbSession } = await storageGet('fbSession');
+    return { configured: !!FIREBASE_API_KEY, signedIn: !!fbSession, email: fbSession?.email || null, linked: !!fbSession?.linked };
+}
+
+async function accountResetPassword({ email }) {
+    await fbIdentity('sendOobCode', { requestType: 'PASSWORD_RESET', email: String(email || '').trim() });
+    return { ok: true };
+}
+
+// After the user saves a different Canvas token, refresh the cloud copy so a
+// new device doesn't restore a dead one. Quiet no-op when not signed in.
+async function accountSyncToken() {
+    const { fbSession } = await storageGet('fbSession');
+    if (!fbSession?.linked) return { ok: true, skipped: true };
+    return accountLink();
 }
 
 // initial badge on load

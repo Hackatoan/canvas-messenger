@@ -1,10 +1,10 @@
 {
   "name": "canvas-messenger",
   "version": "1.0.0",
-  "description": "A browser extension that adds Discord-style messaging to Canvas LMS — direct messages, group chats, class-wide channels, and team/group communication, all without leaving Canvas.",
+  "description": "A browser extension that adds Discord-style messaging to Canvas LMS \u2014 direct messages, group chats, class-wide channels, and team/group communication, all without leaving Canvas.",
   "main": "background.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/"
   },
   "repository": {
     "type": "git",
