@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Canvas Messenger",
-  "version": "1.11.0",
+  "version": "1.11.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAscf0EXWc4lnvXjt5sJDPMzfO034onX4SuuWZFPZCOYAO4zEKoCBOCdi2MFJ6QVg5XwhtM0PKmURY9RSnbeOZiqY7yu3rOzug0qhCcY4DF2pKtJOVw5+GmxslhUu2k2JZ0NB/sX2tQvkok8W7ANyb0VGfgvYX1dUNZGIEHfR5hTemhiyvsTHqVG7Q+Owh9MOgmPNJgwpzf+/ZghYlfQtBRH8koSZJzPnbOvd+6y4MRXOqsoo/+TnLx6iam3M5t7Qs64KG/K69mCwztj+sFzkxpZdbfS5+9OYs+YmeFv9O4QhxPuJLHOp83RTzR8p8ucI8IOufPULmHSFDoPCzRve0QwIDAQAB",
   "description": "Discord-style messaging for Canvas \u2014 chat with students and professors directly.",
   "permissions": [
     "storage",
