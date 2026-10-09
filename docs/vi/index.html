@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Canvas Messenger — Trò chuyện kiểu Discord cho Canvas LMS</title>
+<meta name="description" content="Canvas Messenger là một tiện ích mở rộng trình duyệt mã nguồn mở, miễn phí, mang đến tính năng nhắn tin trực tiếp theo thời gian thực, trò chuyện nhóm và kênh lớp học cho Canvas LMS." />
+<meta name="author" content="Hackatoa" />
+<meta property="og:title" content="Canvas Messenger" />
+<meta property="og:description" content="Nhắn tin kiểu Discord cho Canvas LMS — tin nhắn trực tiếp, trò chuyện nhóm và kênh lớp học, ngay trong Canvas." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://cm.hackatoa.com/vi/" />
+<link rel="canonical" href="https://cm.hackatoa.com/vi/" />
+<meta name="theme-color" content="#e85020" />
+<style>
+  :root{
+    --bg:#0e0f13; --bg2:#15171d; --card:#181b22; --border:#272b34;
+    --text:#e9e6df; --dim:#a2a7b2; --accent:#e85020; --accent2:#ffb347; --link:#ff7a4d;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--link);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+  header.hero{position:relative;overflow:hidden;text-align:center;
+    padding:88px 20px 72px;
+    background:
+      radial-gradient(1200px 400px at 50% -80px,rgba(232,80,32,.28),transparent 60%),
+      linear-gradient(180deg,#121319,#0e0f13);
+    border-bottom:1px solid var(--border)}
+  .badge{display:inline-block;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--accent2);border:1px solid var(--border);border-radius:999px;padding:5px 14px;margin-bottom:22px}
+  h1{font-size:clamp(34px,6vw,56px);line-height:1.05;margin:0 0 16px;letter-spacing:-1px}
+  h1 .grad{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:clamp(17px,2.4vw,21px);color:var(--dim);max-width:640px;margin:0 auto 34px}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:10px;font-weight:600;font-size:15px;border:1px solid transparent}
+  .btn.primary{background:linear-gradient(90deg,var(--accent),#ff6a38);color:#fff}
+  .btn.primary:hover{filter:brightness(1.08);text-decoration:none}
+  .btn.ghost{background:var(--card);border-color:var(--border);color:var(--text)}
+  .btn.ghost:hover{border-color:var(--accent);text-decoration:none}
+  section{padding:64px 0}
+  h2{font-size:clamp(26px,4vw,34px);margin:0 0 8px;letter-spacing:-.5px}
+  .sub{color:var(--dim);margin:0 0 36px;font-size:16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+  .card .ic{font-size:26px;margin-bottom:12px}
+  .card h3{margin:0 0 6px;font-size:18px}
+  .card p{margin:0;color:var(--dim);font-size:15px}
+  .steps{counter-reset:s;display:grid;gap:16px;max-width:760px}
+  .step{display:flex;gap:16px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+  .step::before{counter-increment:s;content:counter(s);flex:0 0 34px;height:34px;width:34px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#191919;font-weight:700;border-radius:9px}
+  .step h3{margin:0 0 4px;font-size:16px}
+  .step p{margin:0;color:var(--dim);font-size:14.5px}
+  .step code{background:#0c0d11;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:13px;color:var(--accent2)}
+  .band{background:linear-gradient(180deg,#14161c,#0e0f13);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .faq details{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px 18px;margin-bottom:12px}
+  .faq summary{cursor:pointer;padding:14px 0;font-weight:600;list-style:none}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::before{content:"+";color:var(--accent);font-weight:700;margin-right:10px}
+  .faq details[open] summary::before{content:"–"}
+  .faq p{color:var(--dim);margin:0 0 14px;font-size:15px}
+  footer{padding:48px 20px;text-align:center;color:var(--dim);border-top:1px solid var(--border);background:#0c0d11}
+  footer a{margin:0 10px}
+  .foot-links{margin-bottom:16px}
+  .note{font-size:13px;color:#7c828e;max-width:640px;margin:24px auto 0}
+</style>
+
+  <!-- i18n:hreflang:start -->
+  <link rel="alternate" hreflang="en" href="https://cm.hackatoa.com/" />
+  <link rel="alternate" hreflang="es" href="https://cm.hackatoa.com/es/" />
+  <link rel="alternate" hreflang="pt-BR" href="https://cm.hackatoa.com/pt-br/" />
+  <link rel="alternate" hreflang="fr" href="https://cm.hackatoa.com/fr/" />
+  <link rel="alternate" hreflang="de" href="https://cm.hackatoa.com/de/" />
+  <link rel="alternate" hreflang="vi" href="https://cm.hackatoa.com/vi/" />
+  <link rel="alternate" hreflang="th" href="https://cm.hackatoa.com/th/" />
+  <link rel="alternate" hreflang="x-default" href="https://cm.hackatoa.com/" />
+  <!-- i18n:hreflang:end -->
+</head>
+<body>
+<!-- i18n:switcher:start -->
+<div id="lang-switch" style="position:fixed;top:8px;right:10px;z-index:99999;font-family:system-ui,-apple-system,sans-serif"><button id="lang-btn" type="button" aria-label="Language" aria-haspopup="true" aria-expanded="false" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;background:rgba(6,10,6,.92);border:1px solid #1a3d1a;border-radius:999px;color:#8a8;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><ellipse cx="12" cy="12" rx="4" ry="9"/></svg></button><div id="lang-pop" role="menu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;flex-direction:column;gap:8px;background:rgba(6,10,6,.95);border:1px solid #1a3d1a;border-radius:10px;padding:9px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6);font-size:12px;white-space:nowrap">
+  <a href="/" hreflang="en" role="menuitem" style="color:#8a8;text-decoration:none;">EN</a>
+  <a href="/es/" hreflang="es" role="menuitem" style="color:#8a8;text-decoration:none;">ES</a>
+  <a href="/pt-br/" hreflang="pt-BR" role="menuitem" style="color:#8a8;text-decoration:none;">PT</a>
+  <a href="/fr/" hreflang="fr" role="menuitem" style="color:#8a8;text-decoration:none;">FR</a>
+  <a href="/de/" hreflang="de" role="menuitem" style="color:#8a8;text-decoration:none;">DE</a>
+  <a href="/vi/" hreflang="vi" role="menuitem" aria-current="true" style="color:#fff;font-weight:700;text-decoration:none;">VI</a>
+  <a href="/th/" hreflang="th" role="menuitem" style="color:#8a8;text-decoration:none;">TH</a>
+</div></div>
+<script src="/assets/lang-switcher.js" defer></script>
+<!-- i18n:switcher:end -->
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">Miễn phí · Mã nguồn mở · Chrome &amp; Firefox</span>
+    <h1>Trò chuyện với bạn cùng lớp,<br><span class="grad">ngay trong Canvas.</span></h1>
+    <p class="tag">Canvas Messenger mang đến tin nhắn trực tiếp, trò chuyện nhóm và kênh lớp học theo phong cách Discord vào Canvas LMS — không cần ứng dụng riêng, không cần quản lý tài khoản phức tạp.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest">⭳ Tải xuống bản mới nhất</a>
+      <a class="btn ghost" href="#setup">Cách hoạt động</a>
+      <a class="btn ghost" href="https://github.com/Hackatoan/canvas-messenger">Xem mã nguồn</a>
+    </div>
+    <p class="note">Không liên kết với hoặc được xác thực bởi Instructure hay Canvas. Canvas là thương hiệu của Instructure, Inc.</p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Trò chuyện ngay tại nơi bạn học tập</h2>
+    <p class="sub">Mọi thứ diễn ra trực tiếp trên các trang Canvas bạn đang sử dụng.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">💬</div><h3>Tin nhắn trực tiếp</h3><p>Nhắn tin 1-1 với bất kỳ bạn học nào theo thời gian thực mà không cần rời khỏi Canvas.</p></div>
+      <div class="card"><div class="ic">👥</div><h3>Trò chuyện nhóm</h3><p>Tạo luồng nhóm cho các dự án, buổi học nhóm hoặc bạn bè.</p></div>
+      <div class="card"><div class="ic">🏫</div><h3>Kênh lớp học</h3><p>Kênh chung cho tất cả mọi người trong một khóa học — thông báo, câu hỏi và trò chuyện.</p></div>
+      <div class="card"><div class="ic">⚡</div><h3>Thời gian thực</h3><p>Tin nhắn đến ngay lập tức qua kết nối ngang hàng WebRTC — nhanh chóng và nhẹ nhàng.</p></div>
+      <div class="card"><div class="ic">🧩</div><h3>Chrome &amp; Firefox</h3><p>Một cơ sở mã, hỗ trợ cả hai trình duyệt. Tải dưới dạng tiện ích mở rộng tiêu chuẩn.</p></div>
+      <div class="card"><div class="ic">🔓</div><h3>Hoàn toàn có thể tự lưu trữ (self-host)</h3><p>Tiện ích mở rộng và cả hai dịch vụ phụ trợ đều là mã nguồn mở — bạn có thể tự chạy toàn bộ hệ thống.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band" id="setup">
+  <div class="wrap">
+    <h2>Bắt đầu</h2>
+    <p class="sub">Tải tiện ích mở rộng, kết nối Canvas và bắt đầu trò chuyện.</p>
+    <div class="steps">
+      <div class="step"><div><h3>Cài đặt tiện ích mở rộng</h3><p><strong>Firefox: </strong>tải xuống <code>.xpi</code> từ <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest">bản phát hành mới nhất</a> và mở trong Firefox để cài đặt bằng một cú nhấp chuột. <strong>Chrome: </strong>tải xuống <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest/download/canvas-messenger-chrome.zip">canvas-messenger-chrome.zip</a>, giải nén, sau đó tải thư mục tại <code>chrome://extensions</code> (bật Chế độ dành cho nhà phát triển → Tải tiện ích đã giải nén).</p></div></div>
+      <div class="step"><div><h3>Kết nối tài khoản Canvas của bạn</h3><p>Mở tiện ích mở rộng và làm theo hướng dẫn thiết lập token để liên kết hồ sơ Canvas giúp bạn cùng lớp có thể tìm thấy bạn.</p></div></div>
+      <div class="step"><div><h3>Mở bất kỳ khóa học Canvas nào</h3><p>Bảng điều khiển nhắn tin sẽ xuất hiện trên giao diện Canvas. Bắt đầu nhắn tin trực tiếp, tạo nhóm hoặc tham gia kênh lớp học.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Mã nguồn mở &amp; có thể tự lưu trữ</h2>
+    <p class="sub">Ba kho lưu trữ cấu thành toàn bộ hệ thống — tất cả đều là mã nguồn mở.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>Tiện ích mở rộng Chrome/Firefox — giao diện được chèn vào Canvas.</p></div>
+      <div class="card"><div class="ic">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>REST API dùng để đăng ký, token xác thực, lời mời và chuyển tiếp tin nhắn.</p></div>
+      <div class="card"><div class="ic">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>Máy chủ báo hiệu WebRTC giúp thiết lập kết nối ngang hàng.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap faq">
+    <h2>Câu hỏi thường gặp</h2>
+    <p class="sub">Phiên bản ngắn gọn.</p>
+    <details><summary>Nó có miễn phí không?</summary><p>Có — miễn phí và mã nguồn mở theo giấy phép của kho lưu trữ. Nếu nó giúp bạn tránh khỏi rắc rối khi lập nhóm, bạn có thể <a href="https://buymeacoffee.com/hackatoa">buy me a coffee</a>.</p></details>
+    <details><summary>Nó có hoạt động trên Chrome và Firefox không?</summary><p>Có cả hai. Các tập lệnh bản dựng tạo ra tệp manifest chính xác cho từng trình duyệt.</p></details>
+    <details><summary>Tôi có cần máy chủ riêng của mình không?</summary><p>Không — nếu chỉ muốn sử dụng Canvas Messenger, bạn chỉ cần cài đặt tiện ích mở rộng và nó sẽ tự động kết nối với máy chủ phụ trợ có sẵn. Bạn chỉ cần máy chủ riêng nếu muốn <strong>self-host</strong> toàn bộ hệ thống: máy chủ relay và signaling đều là mã nguồn mở và sẵn sàng đóng gói (hình ảnh <code>ghcr.io</code> + Dockerfile), vì vậy bạn có thể tự chạy và trỏ tiện ích mở rộng về điểm cuối của riêng mình.</p></details>
+    <details><summary>Đây có phải là sản phẩm chính thức của Canvas không?</summary><p>Không. Canvas Messenger là một tiện ích mở rộng độc lập do cộng đồng xây dựng. Tiện ích này không liên kết với hoặc được xác thực bởi Instructure. Canvas là thương hiệu của Instructure, Inc.</p></details>
+    <details><summary>Dữ liệu của tôi ở đâu?</summary><p>Tin nhắn truyền theo hình thức ngang hàng (peer-to-peer) qua WebRTC khi có thể; máy chủ relay xử lý việc đăng ký, lời mời và phân phối. Hãy tự lưu trữ phần phụ trợ để giữ mọi thứ trên cơ sở hạ tầng do bạn kiểm soát.</p></details>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-links">
+    <a href="https://github.com/Hackatoan/canvas-messenger">GitHub</a> ·
+    <a href="https://hackatoa.com">Hackatoa</a> ·
+    <a href="https://buymeacoffee.com/hackatoa">☕ Buy me a coffee</a>
+  </div>
+  <div>Được phát triển bởi <a href="https://hackatoa.com">Hackatoa</a> · Một phần của hệ sinh thái Hackatoa</div>
+</footer>
+
+</body>
+</html>
