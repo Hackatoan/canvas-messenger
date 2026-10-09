@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Canvas Messenger — Discord-style chat for Canvas LMS</title>
-<meta name="description" content="Canvas Messenger is a free, open-source browser extension that adds real-time direct messages, group chats, and class-wide channels to Canvas LMS." />
+<title>Canvas Messenger — Bate-papo estilo Discord para o Canvas LMS</title>
+<meta name="description" content="O Canvas Messenger é uma extensão de navegador gratuita e de código aberto que adiciona mensagens diretas em tempo real, chats em grupo e canais de turma ao Canvas LMS." />
 <meta name="author" content="Hackatoa" />
 <meta property="og:title" content="Canvas Messenger" />
-<meta property="og:description" content="Discord-style messaging for Canvas LMS — DMs, group chats, and class channels, right inside Canvas." />
+<meta property="og:description" content="Mensagens estilo Discord para o Canvas LMS — DMs, chats em grupo e canais de turma, bem dentro do Canvas." />
 <meta property="og:type" content="website" />
-<meta property="og:url" content="https://cm.hackatoa.com/" />
-<link rel="canonical" href="https://cm.hackatoa.com/" />
+<meta property="og:url" content="https://cm.hackatoa.com/pt-br/" />
+<link rel="canonical" href="https://cm.hackatoa.com/pt-br/" />
 <meta name="theme-color" content="#e85020" />
 <style>
   :root{
@@ -84,9 +84,9 @@
 <body>
 <!-- i18n:switcher:start -->
 <div id="lang-switch" style="position:fixed;top:8px;right:10px;z-index:99999;font-family:system-ui,-apple-system,sans-serif"><button id="lang-btn" type="button" aria-label="Language" aria-haspopup="true" aria-expanded="false" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;background:rgba(6,10,6,.92);border:1px solid #1a3d1a;border-radius:999px;color:#8a8;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><ellipse cx="12" cy="12" rx="4" ry="9"/></svg></button><div id="lang-pop" role="menu" style="display:none;position:absolute;top:calc(100% + 8px);right:0;flex-direction:column;gap:8px;background:rgba(6,10,6,.95);border:1px solid #1a3d1a;border-radius:10px;padding:9px 12px;box-shadow:0 4px 16px rgba(0,0,0,.6);font-size:12px;white-space:nowrap">
-  <a href="/" hreflang="en" role="menuitem" aria-current="true" style="color:#fff;font-weight:700;text-decoration:none;">EN</a>
+  <a href="/" hreflang="en" role="menuitem" style="color:#8a8;text-decoration:none;">EN</a>
   <a href="/es/" hreflang="es" role="menuitem" style="color:#8a8;text-decoration:none;">ES</a>
-  <a href="/pt-br/" hreflang="pt-BR" role="menuitem" style="color:#8a8;text-decoration:none;">PT</a>
+  <a href="/pt-br/" hreflang="pt-BR" role="menuitem" aria-current="true" style="color:#fff;font-weight:700;text-decoration:none;">PT</a>
   <a href="/fr/" hreflang="fr" role="menuitem" style="color:#8a8;text-decoration:none;">FR</a>
   <a href="/de/" hreflang="de" role="menuitem" style="color:#8a8;text-decoration:none;">DE</a>
   <a href="/vi/" hreflang="vi" role="menuitem" style="color:#8a8;text-decoration:none;">VI</a>
@@ -97,53 +97,53 @@
 
 <header class="hero">
   <div class="wrap">
-    <span class="badge">Free · Open Source · Chrome &amp; Firefox</span>
-    <h1>Chat with your classmates,<br><span class="grad">right inside Canvas.</span></h1>
-    <p class="tag">Canvas Messenger adds Discord-style direct messages, group chats, and class-wide channels to Canvas LMS — no separate app, no accounts to juggle.</p>
+    <span class="badge">Gratuito · Código Aberto · Chrome &amp; Firefox</span>
+    <h1>Converse com seus colegas,<br><span class="grad">diretamente dentro do Canvas.</span></h1>
+    <p class="tag">O Canvas Messenger adiciona mensagens diretas estilo Discord, chats em grupo e canais para toda a turma ao Canvas LMS — sem nenhum aplicativo separado ou novas contas para gerenciar.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest">⭳ Download latest</a>
-      <a class="btn ghost" href="#setup">How it works</a>
-      <a class="btn ghost" href="https://github.com/Hackatoan/canvas-messenger">View source</a>
+      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest">⭳ Baixar a versão mais recente</a>
+      <a class="btn ghost" href="#setup">Como funciona</a>
+      <a class="btn ghost" href="https://github.com/Hackatoan/canvas-messenger">Ver código-fonte</a>
     </div>
-    <p class="note">Not affiliated with or endorsed by Instructure or Canvas. Canvas is a trademark of Instructure, Inc.</p>
+    <p class="note">Não afiliado ou endossado pela Instructure ou Canvas. Canvas é uma marca registrada da Instructure, Inc.</p>
   </div>
 </header>
 
 <section>
   <div class="wrap">
-    <h2>Messaging that lives where you study</h2>
-    <p class="sub">Everything happens on top of the Canvas pages you already use.</p>
+    <h2>Mensagens onde você estuda</h2>
+    <p class="sub">Tudo acontece sobre as páginas do Canvas que você já usa.</p>
     <div class="grid">
-      <div class="card"><div class="ic">💬</div><h3>Direct messages</h3><p>Message any classmate one-on-one, in real time, without leaving Canvas.</p></div>
-      <div class="card"><div class="ic">👥</div><h3>Group chats</h3><p>Spin up group threads for projects, study sessions, or friends.</p></div>
-      <div class="card"><div class="ic">🏫</div><h3>Class channels</h3><p>A shared channel for everyone in a course — announcements, questions, and banter.</p></div>
-      <div class="card"><div class="ic">⚡</div><h3>Real-time</h3><p>Messages arrive instantly over WebRTC peer connections — fast and lightweight.</p></div>
-      <div class="card"><div class="ic">🧩</div><h3>Chrome &amp; Firefox</h3><p>One codebase, both browsers. Loads as a standard extension.</p></div>
-      <div class="card"><div class="ic">🔓</div><h3>Fully self-hostable</h3><p>The extension and both backend services are open source — run the whole stack yourself.</p></div>
+      <div class="card"><div class="ic">💬</div><h3>Mensagens diretas</h3><p>Mande mensagem para qualquer colega individualmente, em tempo real, sem sair do Canvas.</p></div>
+      <div class="card"><div class="ic">👥</div><h3>Chats em grupo</h3><p>Crie tópicos em grupo para trabalhos, sessões de estudo ou amigos.</p></div>
+      <div class="card"><div class="ic">🏫</div><h3>Canais da turma</h3><p>Um canal compartilhado para todos em uma disciplina — avisos, dúvidas e conversas.</p></div>
+      <div class="card"><div class="ic">⚡</div><h3>Em tempo real</h3><p>As mensagens chegam instantaneamente por conexões ponto a ponto WebRTC — rápido e leve.</p></div>
+      <div class="card"><div class="ic">🧩</div><h3>Chrome &amp; Firefox</h3><p>Uma única base de código para ambos os navegadores. Carrega como uma extensão padrão.</p></div>
+      <div class="card"><div class="ic">🔓</div><h3>Totalmente auto-hospedável</h3><p>A extensão e ambos os serviços de backend são de código aberto — execute toda a pilha você mesmo.</p></div>
     </div>
   </div>
 </section>
 
 <section class="band" id="setup">
   <div class="wrap">
-    <h2>Get started</h2>
-    <p class="sub">Load the extension, connect Canvas, and start chatting.</p>
+    <h2>Começar</h2>
+    <p class="sub">Carregue a extensão, conecte o Canvas e comece a conversar.</p>
     <div class="steps">
-      <div class="step"><div><h3>Install the extension</h3><p><strong>Firefox:</strong> download the <code>.xpi</code> from the <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest">latest release</a> and open it in Firefox to install in one click. <strong>Chrome:</strong> download <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest/download/canvas-messenger-chrome.zip">canvas-messenger-chrome.zip</a>, unzip it, then load the folder at <code>chrome://extensions</code> (enable Developer mode → Load unpacked).</p></div></div>
-      <div class="step"><div><h3>Connect your Canvas account</h3><p>Open the extension and follow the token setup to link your Canvas profile so classmates can find you.</p></div></div>
-      <div class="step"><div><h3>Open any Canvas course</h3><p>The messaging panel appears on top of Canvas. Start a DM, make a group, or drop into the class channel.</p></div></div>
+      <div class="step"><div><h3>Instale a extensão</h3><p><strong>Firefox:</strong> baixe o <code>.xpi</code> da <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest">última versão</a> e abra-o no Firefox para instalar com um clique. <strong>Chrome:</strong> baixe <a href="https://github.com/Hackatoan/canvas-messenger/releases/latest/download/canvas-messenger-chrome.zip">canvas-messenger-chrome.zip</a>, descompacte-o e carregue a pasta em <code>chrome://extensions</code> (ative o Modo do desenvolvedor → Carregar sem compactação).</p></div></div>
+      <div class="step"><div><h3>Conecte sua conta do Canvas</h3><p>Abra a extensão e siga a configuração de token para vincular seu perfil do Canvas para que os colegas possam encontrá-lo.</p></div></div>
+      <div class="step"><div><h3>Abra qualquer disciplina do Canvas</h3><p>O painel de mensagens aparece sobre o Canvas. Inicie uma DM, crie um grupo ou entre no canal da turma.</p></div></div>
     </div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <h2>Open source &amp; self-hostable</h2>
-    <p class="sub">Three repositories make up the whole system — all public.</p>
+    <h2>Código aberto &amp; auto-hospedável</h2>
+    <p class="sub">Três repositórios compõem todo o sistema — todos públicos.</p>
     <div class="grid">
-      <div class="card"><div class="ic">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>The Chrome/Firefox extension — the UI injected into Canvas.</p></div>
-      <div class="card"><div class="ic">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>REST API for registration, auth tokens, invites, and message relay.</p></div>
-      <div class="card"><div class="ic">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>WebRTC signaling server that brokers peer connections.</p></div>
+      <div class="card"><div class="ic">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>A extensão para Chrome/Firefox — a interface injetada no Canvas.</p></div>
+      <div class="card"><div class="ic">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>API REST para registro, tokens de autenticação, convites e retransmissão de mensagens.</p></div>
+      <div class="card"><div class="ic">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>Servidor de sinalização WebRTC que faz a intermediação de conexões ponto a ponto.</p></div>
     </div>
   </div>
 </section>
@@ -151,12 +151,12 @@
 <section class="band">
   <div class="wrap faq">
     <h2>FAQ</h2>
-    <p class="sub">The short version.</p>
-    <details><summary>Is it free?</summary><p>Yes — free and open source under the repository's license. If it saves you a group-chat headache, you can <a href="https://buymeacoffee.com/hackatoa">buy me a coffee</a>.</p></details>
-    <details><summary>Does it work on Chrome and Firefox?</summary><p>Both. The build scripts produce the correct manifest for each browser.</p></details>
-    <details><summary>Do I need my own server?</summary><p>No — to just use Canvas Messenger, install the extension and it connects to the hosted backend out of the box. You only need your own server if you want to <strong>self-host</strong> the whole stack: the relay and signaling servers are open source and container-ready (<code>ghcr.io</code> images + Dockerfiles), so you can run them yourself and point the extension at your own endpoints.</p></details>
-    <details><summary>Is this an official Canvas product?</summary><p>No. Canvas Messenger is an independent, community-built extension. It is not affiliated with or endorsed by Instructure. Canvas is a trademark of Instructure, Inc.</p></details>
-    <details><summary>Where's my data?</summary><p>Messages travel peer-to-peer over WebRTC where possible; the relay handles registration, invites, and delivery. Self-host the backend to keep everything on infrastructure you control.</p></details>
+    <p class="sub">A versão curta.</p>
+    <details><summary>É gratuito?</summary><p>Sim — gratuito e de código aberto sob a licença do repositório. Se isso te poupar a dor de cabeça de um chat em grupo, você pode <a href="https://buymeacoffee.com/hackatoa">buy me a coffee</a>.</p></details>
+    <details><summary>Funciona no Chrome e no Firefox?</summary><p>Em ambos. Os scripts de compilação geram o manifesto correto para cada navegador.</p></details>
+    <details><summary>Preciso do meu próprio servidor?</summary><p>Não — para apenas usar o Canvas Messenger, instale a extensão e ela se conecta ao backend hospedado por padrão. Você só precisa do seu próprio servidor se quiser <strong>self-host</strong> toda a pilha: os servidores de retransmissão e sinalização são de código aberto e prontos para contêineres (imagens <code>ghcr.io</code> + Dockerfiles), para que você possa executá-los sozinho e apontar a extensão para seus próprios endpoints.</p></details>
+    <details><summary>Isso é um produto oficial do Canvas?</summary><p>Não. O Canvas Messenger é uma extensão independente criada pela comunidade. Não é afiliado ou endossado pela Instructure. Canvas é uma marca registrada da Instructure, Inc.</p></details>
+    <details><summary>Onde estão meus dados?</summary><p>As mensagens trafegam ponto a ponto via WebRTC sempre que possível; o relay lida com registro, convites e entrega. Auto-hospede o backend para manter tudo em uma infraestrutura que você controla.</p></details>
   </div>
 </section>
 
@@ -166,7 +166,7 @@
     <a href="https://hackatoa.com">Hackatoa</a> ·
     <a href="https://buymeacoffee.com/hackatoa">☕ Buy me a coffee</a>
   </div>
-  <div>Built by <a href="https://hackatoa.com">Hackatoa</a> · Part of the Hackatoa ecosystem</div>
+  <div>Desenvolvido por <a href="https://hackatoa.com">Hackatoa</a> · Parte do ecossistema Hackatoa</div>
 </footer>
 
 </body>

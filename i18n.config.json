@@ -1,0 +1,9 @@
+{
+  "origin": "https://cm.hackatoa.com",
+  "srcDir": "docs",
+  "locales": ["en", "es", "pt-br", "fr", "de", "vi", "th"],
+  "rootFile": "index.html",
+  "pages": [{ "file": "index.html", "urlPath": "/" }],
+  "internalLinks": {},
+  "keepTerms": ["Canvas Messenger", "Canvas LMS", "Canvas", "Discord", "Hackatoa", "Firefox", "Chrome", "GitHub", "WebRTC", "canvas-messenger", "cm-relay", "cm-signaling", "Buy me a coffee"]
+}
