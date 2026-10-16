@@ -67,6 +67,7 @@
     line-height: 1;
 }
 .cm-icon-btn:hover { color: #dcddde; background: #404249; }
+.cm-icon-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 
 .cm-tabs {
     display: flex;
@@ -89,6 +90,7 @@
     transition: color 0.1s, background 0.1s;
 }
 .cm-tab:hover { color: #dcddde; background: #404249; }
+.cm-tab:focus-visible { outline: 2px solid #5865f2; outline-offset: -2px; }
 .cm-tab.active { color: #fff; background: #404249; }
 
 .cm-conv-list {
@@ -220,6 +222,7 @@
     border-radius: 4px;
 }
 .cm-main-header .cm-back-btn:hover { color: #fff; }
+.cm-main-header .cm-back-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 
 .cm-main-title {
     font-size: 15px;
@@ -356,6 +359,7 @@
     flex-shrink: 0;
 }
 .cm-send-btn:hover { color: #5865f2; }
+.cm-send-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 .cm-send-btn.active { color: #5865f2; }
 
 /* ── New conversation ────────────────────────────────────────────────────── */
@@ -420,6 +424,12 @@
 .cm-field select:focus {
     border-color: #5865f2;
 }
+.cm-field input:focus-visible,
+.cm-field textarea:focus-visible,
+.cm-field select:focus-visible {
+    outline: 2px solid #5865f2;
+    outline-offset: 2px;
+}
 
 .cm-field textarea { resize: vertical; min-height: 80px; }
 .cm-field select option { background: #2b2d31; }
@@ -461,6 +471,7 @@
     display: flex;
 }
 .cm-recipient-tag button:hover { color: #fff; }
+.cm-recipient-tag button:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 
 .cm-recipient-input {
     background: none !important;
@@ -519,6 +530,7 @@
     font-family: inherit;
 }
 .cm-btn-primary:hover { background: #4752c4; }
+.cm-btn-primary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .cm-btn-primary:disabled { background: #4752c4; opacity: 0.5; cursor: not-allowed; }
 
 /* ── Setup screen ────────────────────────────────────────────────────────── */
@@ -615,6 +627,7 @@
     padding: 4px 10px !important;
 }
 .cm-dm-btn:hover { background: #5865f2 !important; color: #fff !important; border-color: #5865f2 !important; }
+.cm-dm-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 
 /* ── Popup-specific overrides ────────────────────────────────────────────── */
 .popup-mode .cm-sidebar { width: 200px; min-width: 200px; }
@@ -637,6 +650,7 @@
     transition: border-color 0.1s, color 0.1s;
 }
 .cm-add-contact-btn:hover { border-color: #5865f2; color: #5865f2; }
+.cm-add-contact-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 
 .cm-contact-item { align-items: center; }
 
@@ -784,6 +798,10 @@
     background: rgba(87,242,135,0.2) !important;
     color: #57f287 !important;
 }
+.cm-call-btn:focus-visible {
+    outline: 2px solid #57f287;
+    outline-offset: 2px;
+}
 
 /* ── Screenshot snippet ──────────────────────────────────────────────────── */
 .cm-snippet-preview {
@@ -821,6 +839,7 @@
     color: #87898c;
 }
 .cm-snippet-btn:hover { color: #5865f2 !important; }
+.cm-snippet-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
 
 /* Secondary button (delete in contact form) */
 .cm-btn-secondary {
@@ -836,4 +855,5 @@
     font-family: inherit;
 }
 .cm-btn-secondary:hover { background: rgba(237,66,69,0.15); }
+.cm-btn-secondary:focus-visible { outline: 2px solid #ed4245; outline-offset: 2px; }
 

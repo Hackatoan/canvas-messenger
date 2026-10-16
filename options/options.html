@@ -73,6 +73,7 @@
     transition: border-color 0.15s;
   }
   input:focus { border-color: #5865f2; }
+  input:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
   input.error { border-color: #ed4245; }
   .btn-row {
     display: flex;
@@ -92,6 +93,7 @@
     font-family: inherit;
   }
   .btn-primary:hover { background: #4752c4; }
+  .btn-primary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-secondary {
     background: #383a40;
@@ -105,6 +107,7 @@
     transition: background 0.1s;
   }
   .btn-secondary:hover { background: #404249; }
+  .btn-secondary:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
   .status {
     margin-top: 16px;
     padding: 10px 14px;
@@ -145,6 +148,7 @@
   .account-who { font-size: 13px; color: #b5bac1; margin-bottom: 12px; line-height: 1.5; }
   .link-btn { background: none; border: none; color: #5865f2; font: inherit; font-size: 12px; cursor: pointer; padding: 0; margin-top: 10px; }
   .link-btn:hover { text-decoration: underline; }
+  .link-btn:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; }
   .status.info { background: rgba(88,101,242,0.15); border: 1px solid rgba(88,101,242,0.3); color: #c9cdfb; display: block; }
   .status.inline { margin-top: 12px; }
 </style>
