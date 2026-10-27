@@ -487,29 +487,42 @@ function redact(str) {
 
             for (const { path, ct, body } of attempts) {
                 console.log('[CM token-setup] POST →', path, ct.split('/')[1]);
-                const resp = await fetch(path, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type':     ct,
-                        'Accept':           'application/json',
-                        'X-CSRF-Token':     csrf,
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body,
-                });
-                console.log('[CM token-setup] status:', resp.status);
-                if (resp.ok) {
-                    const data = await resp.json();
-                    console.log('[CM token-setup] API success. Keys:', Object.keys(data));
-                    return data.token          ||
-                           data.visible_token  ||
-                           data.full_token     ||
-                           data.access_token?.token || null;
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 10000);
+                try {
+                    const resp = await fetch(path, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        signal: controller.signal,
+                        headers: {
+                            'Content-Type':     ct,
+                            'Accept':           'application/json',
+                            'X-CSRF-Token':     csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body,
+                    });
+                    clearTimeout(timeout);
+                    console.log('[CM token-setup] status:', resp.status);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        console.log('[CM token-setup] API success. Keys:', Object.keys(data));
+                        return data.token          ||
+                               data.visible_token  ||
+                               data.full_token     ||
+                               data.access_token?.token || null;
+                    }
+                    const errBody = await resp.text().catch(() => '');
+                    console.log('[CM token-setup] error body:', errBody.slice(0, 200));
+                    updateOverlay(`API attempt failed (${resp.status}) — trying next…`);
+                } catch (e) {
+                    clearTimeout(timeout);
+                    if (e.name === 'AbortError') {
+                        updateOverlay('Request timeout — trying next…');
+                    } else {
+                        throw e;
+                    }
                 }
-                const errBody = await resp.text().catch(() => '');
-                console.log('[CM token-setup] error body:', errBody.slice(0, 200));
-                updateOverlay(`API attempt failed (${resp.status}) — trying next…`);
             }
 
             updateOverlay('API failed — trying form…');
