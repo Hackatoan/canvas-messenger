@@ -69,17 +69,44 @@ async function canvasFetch(path, opts = {}) {
     if (!canvasUrl || !apiToken) throw new Error('NOT_CONFIGURED');
 
     const url = `${canvasUrl.replace(/\/$/, '')}/api/v1${path}`;
-    const res = await fetch(url, {
-        ...opts,
-        headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Content-Type': 'application/json',
-            ...(opts.headers || {}),
-        },
-    });
-    if (res.status === 401) throw new Error('UNAUTHORIZED');
-    if (!res.ok) throw new Error(`API_ERROR:${res.status}`);
-    return res.json();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+        const res = await fetch(url, {
+            ...opts,
+            signal: controller.signal,
+            headers: {
+                'Authorization': `Bearer ${apiToken}`,
+                'Content-Type': 'application/json',
+                ...(opts.headers || {}),
+            },
+        });
+        clearTimeout(timeout);
+        if (res.status === 401) throw new Error('UNAUTHORIZED');
+        if (!res.ok) throw new Error(`API_ERROR:${res.status}`);
+        return res.json();
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
+    }
+}
+
+// ── Relay API helper ─────────────────────────────────────────────────────────
+
+async function relayFetch(path, opts = {}, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(`${RELAY_API}${path}`, {
+            ...opts,
+            signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        return res;
+    } catch (e) {
+        clearTimeout(timeout);
+        throw e;
+    }
 }
 
 async function getConversations(scope = 'all') {
@@ -387,7 +414,7 @@ async function relayRegister({ name, email }) {
     // time it sees this account — that's what lets a *future* device recover
     // this exact keypair instead of minting its own and silently breaking
     // everyone's E2E decryption. See cm-relay's /api/register.
-    const res = await fetch(`${RELAY_API}/register`, {
+    const res = await relayFetch('/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email: email || null, publicKey: JSON.stringify(publicKeyJwk),
@@ -433,7 +460,7 @@ async function relaySendMessage({ recipientId, body }) {
     const contact = contacts.find(c => c.id === recipientId);
     if (!contact) throw new Error('Contact not found — add them first');
     const { encryptedBody, iv } = await relayEncrypt(body, profile.privateKeyJwk, contact.publicKeyJwk);
-    const res = await fetch(`${RELAY_API}/messages`, {
+    const res = await relayFetch('/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${profile.authToken}` },
         body: JSON.stringify({ recipientId, encryptedBody, iv }),
@@ -474,7 +501,7 @@ async function syncRelayMessages() {
     const threads = await new Promise(r => chrome.storage.local.get('relayThreads', d => r(d.relayThreads || [])));
     const since = threads.reduce((m, t) => t.lastAt > m ? t.lastAt : m, '1970-01-01T00:00:00.000Z');
     try {
-        const res = await fetch(`${RELAY_API}/messages?since=${encodeURIComponent(since)}`,
+        const res = await relayFetch(`/messages?since=${encodeURIComponent(since)}`,
             { headers: { 'Authorization': `Bearer ${profile.authToken}` } });
         if (!res.ok) return;
         const msgs = await res.json();
