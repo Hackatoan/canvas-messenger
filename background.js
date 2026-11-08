@@ -655,7 +655,7 @@ async function handleMessage(msg, sender = {}) {
         case 'relayGetUser': {
             const p = await getRelayProfile();
             if (!p) throw new Error('Not registered');
-            const ru = await fetch(`${RELAY_API}/users/${msg.userId}`, { headers: { 'Authorization': `Bearer ${p.authToken}` } });
+            const ru = await fetch(`${RELAY_API}/users/${encodeURIComponent(msg.userId)}`, { headers: { 'Authorization': `Bearer ${p.authToken}` } });
             return ru.json();
         }
         case 'relayGetContacts':  return getRelayContacts();
@@ -696,7 +696,7 @@ async function handleMessage(msg, sender = {}) {
             return { token, url: `https://relay.hackatoa.com/invite/${token}` };
         }
         case 'relayResolveInvite': {
-            const rr = await fetch(`${RELAY_API}/invites/${msg.token}`);
+            const rr = await fetch(`${RELAY_API}/invites/${encodeURIComponent(msg.token)}`);
             if (!rr.ok) throw new Error('Invalid invite');
             return rr.json();
         }
