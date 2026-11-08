@@ -47,9 +47,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "styles/messenger.css",
-        "call.html",
-        "call.js"
+        "styles/messenger.css"
       ],
       "matches": [
         "<all_urls>"
