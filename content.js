@@ -241,8 +241,18 @@
     // ── Context menu (for FAB and nav button) ─────────────────────────────
     function showContextMenu(x, y, fromNav) {
         document.getElementById('cm-ctx-menu')?.remove();
+        const opener = document.activeElement;
+        // Opened from the keyboard (ContextMenu key / Shift+F10) on a
+        // keyboard-focused launcher: anchor to it and focus the first item.
+        const fromKeyboard = !!opener?.matches?.(':focus-visible');
+        if (fromKeyboard && opener?.getBoundingClientRect) {
+            const r = opener.getBoundingClientRect();
+            x = r.left; y = r.top;
+        }
         const menu = document.createElement('div');
         menu.id = 'cm-ctx-menu';
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', 'Canvas Messenger button options');
         Object.assign(menu.style, {
             position: 'fixed', zIndex: '100001',
             left: Math.min(x, window.innerWidth  - 185) + 'px',
@@ -267,6 +277,7 @@
         for (const item of items) {
             const btn = document.createElement('button');
             btn.textContent = item.label;
+            btn.setAttribute('role', 'menuitem');
             Object.assign(btn.style, {
                 display: 'block', width: '100%', textAlign: 'left',
                 background: 'none', border: 'none', color: '#dbdee1',
@@ -275,11 +286,28 @@
             });
             btn.addEventListener('mouseenter', () => btn.style.background = '#404249');
             btn.addEventListener('mouseleave', () => btn.style.background = 'none');
+            btn.addEventListener('focus', () => btn.style.background = '#404249');
+            btn.addEventListener('blur',  () => btn.style.background = 'none');
             btn.addEventListener('click', () => { menu.remove(); item.action(); });
             menu.appendChild(btn);
         }
 
+        menu.addEventListener('keydown', e => {
+            const btns = [...menu.querySelectorAll('button')];
+            const i = btns.indexOf(document.activeElement);
+            if (e.key === 'Escape' || e.key === 'Tab') {
+                e.preventDefault();
+                e.stopPropagation(); // don't also close the panel
+                menu.remove();
+                opener?.focus?.();
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                btns[(i + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length].focus();
+            }
+        });
+
         document.body.appendChild(menu);
+        if (fromKeyboard) menu.querySelector('button')?.focus();
         const dismiss = e => {
             if (!menu.contains(e.target)) {
                 menu.remove();
