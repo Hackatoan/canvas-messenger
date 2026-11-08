@@ -24,7 +24,7 @@ const API = {
     getCourseUsers:         (courseId, role)          => API.send('getCourseUsers',         { courseId, role }),
     getDiscussionEntries:   (courseId, topicId)       => API.send('getDiscussionEntries',   { courseId, topicId }),
     createDiscussionEntry:  (courseId, topicId, message) => API.send('createDiscussionEntry', { courseId, topicId, message }),
-    findOrCreateClassChat:  (courseId)                => API.send('findOrCreateClassChat',  { courseId }),
+    findOrCreateClassChat:  (courseId, fresh = false) => API.send('findOrCreateClassChat',  { courseId, fresh }),
     markRead:               (id)                      => API.send('markRead',               { id }),
     getSettings:      ()              => API.send('getSettings'),
     getCurrentUser:   ()              => API.send('getCurrentUser'),
@@ -575,10 +575,16 @@ class CanvasMessenger {
         this.stopClassChatPoll();
         this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Setting up class chat…</div>';
         try {
-            const topic = await API.findOrCreateClassChat(course.id);
+            let topic = await API.findOrCreateClassChat(course.id);
             this.classChatTopic = topic;
             this.classChatCourse = course;
-            await this.renderClassChat(course, topic, true);
+            const err = await this.renderClassChat(course, topic, true);
+            if (err === 'API_ERROR:404') {
+                // Cached topic id is stale (topic deleted) — rediscover once.
+                topic = await API.findOrCreateClassChat(course.id, true);
+                this.classChatTopic = topic;
+                await this.renderClassChat(course, topic, true);
+            }
             // Poll for new messages every 20s while the chat is open
             this.classChatPollTimer = setInterval(() => this.refreshClassChat(), 20000);
         } catch (e) {
@@ -592,7 +598,7 @@ class CanvasMessenger {
             entries = await API.getDiscussionEntries(course.id, topic.id);
         } catch (e) {
             this.$main.innerHTML = `<div class="cm-error">${escHtml(e.message)}</div>`;
-            return;
+            return e.message;
         }
 
         // Sort oldest first

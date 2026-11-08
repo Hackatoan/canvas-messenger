@@ -203,13 +203,24 @@ async function createDiscussion(courseId, title) {
     });
 }
 
-async function findOrCreateClassChat(courseId) {
+// Finding the class-chat topic means listing up to 50 discussion topics —
+// full HTML bodies included — on every class-chat open. Remember the topic
+// id per Canvas host + course; callers only need `id`. `fresh` bypasses the
+// cache (messenger.js retries with it if the cached topic 404s).
+const CLASS_CHAT_CACHE = 'cmClassChatTopics';
+
+async function findOrCreateClassChat(courseId, { fresh = false } = {}) {
+    const { [CLASS_CHAT_CACHE]: cache = {}, canvasUrl } = await storageGet([CLASS_CHAT_CACHE, 'canvasUrl']);
+    const ck = `${canvasUrl}|${courseId}`;
+    if (!fresh && cache[ck] != null) return { id: cache[ck] };
+
     const discussions = await getDiscussions(courseId);
     const existing = discussions.find(d =>
         d.title === '📣 Class Chat' || d.title === 'Class Chat'
     );
-    if (existing) return existing;
-    return createDiscussion(courseId, '📣 Class Chat');
+    const topic = existing || await createDiscussion(courseId, '📣 Class Chat');
+    if (topic?.id != null) await storageSet({ [CLASS_CHAT_CACHE]: { ...cache, [ck]: topic.id } });
+    return topic;
 }
 
 async function markRead(id) {
@@ -622,7 +633,7 @@ async function handleMessage(msg, sender = {}) {
         case 'getDiscussions':        return getDiscussions(msg.courseId);
         case 'getDiscussionEntries':  return getDiscussionEntries(msg.courseId, msg.topicId);
         case 'createDiscussionEntry': return createDiscussionEntry(msg.courseId, msg.topicId, msg.message);
-        case 'findOrCreateClassChat': return findOrCreateClassChat(msg.courseId);
+        case 'findOrCreateClassChat': return findOrCreateClassChat(msg.courseId, { fresh: !!msg.fresh });
         case 'markRead':           return markRead(msg.id);
         case 'getSettings':        return getSettings();
         case 'getCurrentUser':     return getCurrentUser();
