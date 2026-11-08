@@ -322,7 +322,7 @@ class CanvasMessenger {
             return `
                 <div class="cm-msg-group">
                     <div class="cm-msg-group-avatar">
-                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(author.name)}">${initials(author.name)}</div>
+                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(author.name)}">${escHtml(initials(author.name))}</div>
                     </div>
                     <div class="cm-msg-group-body">
                         <div class="cm-msg-group-header">
@@ -415,7 +415,7 @@ class CanvasMessenger {
         bubble.className = 'cm-msg-group';
         bubble.innerHTML = `
             <div class="cm-msg-group-avatar">
-                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${initials(myName)}</div>
+                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
             </div>
             <div class="cm-msg-group-body">
                 <div class="cm-msg-group-header">
@@ -560,7 +560,7 @@ class CanvasMessenger {
             return `
                 <div class="cm-msg-group">
                     <div class="cm-msg-group-avatar">
-                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${initials(name)}</div>
+                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
                     </div>
                     <div class="cm-msg-group-body">
                         <div class="cm-msg-group-header">
@@ -631,7 +631,7 @@ class CanvasMessenger {
         bubble.className = 'cm-msg-group';
         bubble.innerHTML = `
             <div class="cm-msg-group-avatar">
-                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${initials(myName)}</div>
+                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
             </div>
             <div class="cm-msg-group-body">
                 <div class="cm-msg-group-header">
@@ -726,7 +726,7 @@ class CanvasMessenger {
                     ${members.map(m => `
                         <div class="cm-msg-group" style="margin-top:8px">
                             <div class="cm-msg-group-avatar">
-                                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(m.name)}">${initials(m.name)}</div>
+                                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(m.name)}">${escHtml(initials(m.name))}</div>
                             </div>
                             <div class="cm-msg-group-body" style="display:flex;align-items:center;justify-content:space-between">
                                 <div>
@@ -787,7 +787,7 @@ class CanvasMessenger {
         ).join('');
 
         const prefilledRecipients = (this.recipients || []).map(r =>
-            `<div class="cm-recipient-tag" data-id="${r.id}">${escHtml(r.name)} <button data-id="${r.id}" title="Remove" aria-label="Remove ${escHtml(r.name)}"><span aria-hidden="true">×</span></button></div>`
+            `<div class="cm-recipient-tag" data-id="${escHtml(r.id)}">${escHtml(r.name)} <button data-id="${escHtml(r.id)}" title="Remove" aria-label="Remove ${escHtml(r.name)}"><span aria-hidden="true">×</span></button></div>`
         ).join('');
 
         this.$main.innerHTML = `
@@ -901,7 +901,7 @@ class CanvasMessenger {
             for (const r of this.recipients) {
                 const tag = document.createElement('div');
                 tag.className = 'cm-recipient-tag';
-                tag.innerHTML = `${escHtml(r.name)} <button data-id="${r.id}" title="Remove" aria-label="Remove ${escHtml(r.name)}"><span aria-hidden="true">×</span></button>`;
+                tag.innerHTML = `${escHtml(r.name)} <button data-id="${escHtml(r.id)}" title="Remove" aria-label="Remove ${escHtml(r.name)}"><span aria-hidden="true">×</span></button>`;
                 tag.querySelector('button').addEventListener('click', () => {
                     this.recipients = this.recipients.filter(x => x.id !== r.id);
                     renderRecipients();
@@ -921,8 +921,8 @@ class CanvasMessenger {
                     const users = Array.isArray(data) ? data : (data.users || []);
                     if (!users.length) { results.style.display = 'none'; return; }
                     results.innerHTML = users.slice(0, 10).map(u => `
-                        <div class="cm-search-result" data-id="${u.id}" data-name="${escHtml(u.name || u.full_name)}">
-                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${initials(u.name || u.full_name)}</div>
+                        <div class="cm-search-result" data-id="${escHtml(u.id)}" data-name="${escHtml(u.name || u.full_name)}">
+                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${escHtml(initials(u.name || u.full_name))}</div>
                             <div>
                                 <div class="cm-search-result-name">${escHtml(u.name || u.full_name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.common_courses ? 'Student/Instructor' : '')}</div>
@@ -1437,9 +1437,9 @@ class CanvasMessenger {
         const renderMsg = m => {
             const isMe = m.fromMe;
             const name = isMe ? (profile.name || 'Me') : contact.name;
-            return `<div class="cm-msg-group" data-relay-id="${m.id}">
+            return `<div class="cm-msg-group" data-relay-id="${escHtml(m.id)}">
                 <div class="cm-msg-group-avatar">
-                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${initials(name)}</div>
+                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
                 </div>
                 <div class="cm-msg-group-body">
                     <div class="cm-msg-group-header">
@@ -1513,7 +1513,7 @@ class CanvasMessenger {
             bubble.className = 'cm-msg-group';
             bubble.innerHTML = `
                 <div class="cm-msg-group-avatar">
-                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${initials(myName)}</div>
+                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
                 </div>
                 <div class="cm-msg-group-body">
                     <div class="cm-msg-group-header">
@@ -1540,7 +1540,7 @@ class CanvasMessenger {
             // Reload and append new messages
             const newMsgs = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetMessages', threadId: thread.id }, r)) || [];
             for (const m of newMsgs) {
-                if (!msgEl.querySelector(`[data-relay-id="${m.id}"]`) && !m.fromMe) {
+                if (!msgEl.querySelector(`[data-relay-id="${CSS.escape(String(m.id))}"]`) && !m.fromMe) {
                     msgEl.insertAdjacentHTML('beforeend', renderMsg(m));
                     msgEl.scrollTop = msgEl.scrollHeight;
                 }
@@ -1675,7 +1675,7 @@ class CanvasMessenger {
                     users.forEach(u => { searchResultsData[u.id] = u; });
                     searchResults.innerHTML = users.map(u => `
                         <div class="cm-search-result cm-relay-result" data-uid="${escHtml(u.id)}">
-                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${initials(u.name)}</div>
+                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${escHtml(initials(u.name))}</div>
                             <div style="flex:1;min-width:0">
                                 <div class="cm-search-result-name">${escHtml(u.name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.email || '')}</div>

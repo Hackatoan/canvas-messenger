@@ -428,7 +428,8 @@
         console.error('[Canvas Messenger] init failed:', err);
         loadingEl.style.color = '#ed4245';
         loadingEl.innerHTML   = `⚠ Canvas Messenger failed to load<br>
-            <small style="font-size:11px">${err.message}</small>`;
+            <small style="font-size:11px"></small>`;
+        loadingEl.querySelector('small').textContent = String(err?.message || err);
     }
 
     // ── Incoming call toast ───────────────────────────────────────────────
