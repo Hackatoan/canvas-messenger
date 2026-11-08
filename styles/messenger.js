@@ -1810,7 +1810,12 @@ class CanvasMessenger {
             debounce = setTimeout(async () => {
                 try {
                     const users = await new Promise(r => chrome.runtime.sendMessage({ action: 'relaySearchUsers', query: q }, r));
-                    if (!Array.isArray(users) || !users.length) { searchResults.style.display = 'none'; return; }
+                    if (!Array.isArray(users) || !users.length) {
+                        // Say so instead of silently hiding; point at the invite fallback below.
+                        searchResults.innerHTML = `<div class="cm-empty" role="status">No one found for “${escHtml(q)}”. Try an invite link instead.</div>`;
+                        searchResults.style.display = 'block';
+                        return;
+                    }
                     searchResultsData = {};
                     users.forEach(u => { searchResultsData[u.id] = u; });
                     searchResults.innerHTML = users.map(u => `
