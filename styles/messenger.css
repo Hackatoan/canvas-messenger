@@ -274,6 +274,9 @@
     color: #f2f3f5;
 }
 
+/* Indented to line up with the message text (36px avatar + 12px gap). */
+.cm-msg-failed { font-size: 11px; color: #ed4245; margin-top: 2px; padding-left: 48px; }
+
 .cm-msg-timestamp {
     font-size: 11px;
     color: #87898c;

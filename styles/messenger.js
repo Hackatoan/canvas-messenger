@@ -1550,7 +1550,7 @@ class CanvasMessenger {
                     </svg>
                 </button>
             </div>
-            <div class="cm-messages" id="cm-relay-messages">
+            <div class="cm-messages" id="cm-relay-messages" role="log" aria-label="Messages with ${escHtml(contact.name)}">
                 ${messages.map(renderMsg).join('') || '<div class="cm-empty">No messages yet — say hello!</div>'}
             </div>
             <div class="cm-typing-indicator" id="cm-relay-typing-indicator" style="display:none">${escHtml(contact.name)} is typing…</div>
@@ -1613,7 +1613,15 @@ class CanvasMessenger {
                 await new Promise((resolve, reject) => chrome.runtime.sendMessage(
                     { action: 'relaySendMessage', recipientId: contact.id, body },
                     r => r?.ok ? resolve(r) : reject(new Error(r?.error || 'Send failed'))));
-            } catch (e) { bubble.style.opacity = '0.4'; bubble.title = 'Failed: ' + e.message; }
+            } catch (e) {
+                bubble.style.opacity = '0.4';
+                bubble.title = 'Failed: ' + e.message;
+                // Visible (and, via the log region, announced) instead of tooltip-only.
+                const fail = document.createElement('div');
+                fail.className = 'cm-msg-failed';
+                fail.textContent = `Not sent — ${e.message}`;
+                bubble.after(fail); // outside the dimmed bubble so it stays readable
+            }
         };
         textarea.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
         sendBtn.addEventListener('click', doSend);
