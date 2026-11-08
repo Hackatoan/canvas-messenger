@@ -51,7 +51,7 @@ function load({ routes = [], tabs = [] } = {}) {
     const src = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
     const inert = () => 0;
     const api = new Function('chrome', 'WebSocket', 'fetch', 'crypto', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        src + '\nreturn { handleMessage, updateBadge, broadcastToTabs };')
+        src + '\nreturn { handleMessage, updateBadge, broadcastToTabs, storeRelayMessage, relayEncrypt };')
         (chrome, WS, fetchFake, globalThis.crypto, inert, inert, inert, inert);
     return { api, store, calls, storageOps, badge, tabQueries, tabMessages };
 }
@@ -106,4 +106,44 @@ test('broadcastToTabs falls back to every tab before a Canvas host is saved', as
     const env = load({ tabs: [{ id: 1, url: 'https://a.example/' }, { id: 2, url: 'https://b.example/' }] });
     await env.api.broadcastToTabs('cm-call-event', { type: 'incoming-call' });
     assert.deepEqual(env.tabMessages.map(t => t.id), [1, 2]);
+});
+
+async function keypair() {
+    const kp = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits']);
+    return { pub: await crypto.subtle.exportKey('jwk', kp.publicKey), priv: await crypto.subtle.exportKey('jwk', kp.privateKey) };
+}
+
+test('live relay receive stores message + thread in one read-modify-write', async () => {
+    const me = await keypair(), peer = await keypair();
+    const env = load();
+    env.store.relayProfile = { id: 'me', authToken: 'RT', privateKeyJwk: me.priv, publicKeyJwk: me.pub };
+    env.store.relayContacts = [{ id: 'p1', name: 'Pat', publicKeyJwk: peer.pub }];
+    const { encryptedBody, iv } = await env.api.relayEncrypt('hi there', peer.priv, me.pub);
+    env.storageOps.get = 0; env.storageOps.set = 0;
+
+    const msg = { id: 'm1', threadId: 't1', senderId: 'p1', encryptedBody, iv, sentAt: '2026-11-08T10:00:00.000Z' };
+    await env.api.storeRelayMessage(msg);
+    assert.deepEqual(env.storageOps, { get: 2, set: 1 });
+    assert.deepEqual(env.store.relayMsg_t1, [{ id: 'm1', threadId: 't1', senderId: 'p1', body: 'hi there', sentAt: msg.sentAt, fromMe: false }]);
+    assert.deepEqual(env.store.relayThreads, [{ id: 't1', contactId: 'p1', contactName: 'Pat', lastMessage: 'hi there', lastAt: msg.sentAt, unreadCount: 1 }]);
+
+    // Duplicate delivery: message list untouched, thread still bumped (unchanged semantics).
+    await env.api.storeRelayMessage(msg);
+    assert.equal(env.store.relayMsg_t1.length, 1);
+    assert.equal(env.store.relayThreads[0].unreadCount, 2);
+});
+
+test('relaySendMessage stores the sent message + thread in one write', async () => {
+    const me = await keypair(), peer = await keypair();
+    const env = load({ routes: [['/messages', () => ({ status: 200, body: { id: 'm9', threadId: 't9', sentAt: '2026-11-08T11:00:00.000Z' } })]] });
+    env.store.relayProfile = { id: 'me', authToken: 'RT', privateKeyJwk: me.priv, publicKeyJwk: me.pub };
+    env.store.relayContacts = [{ id: 'p1', name: 'Pat', publicKeyJwk: peer.pub }];
+    env.store.relayThreads = [{ id: 't9', contactId: 'p1', contactName: 'Pat', lastMessage: 'old', lastAt: 'x', unreadCount: 3 }];
+    env.storageOps.get = 0; env.storageOps.set = 0;
+
+    const r = await env.api.handleMessage({ action: 'relaySendMessage', recipientId: 'p1', body: 'yo' });
+    assert.deepEqual(r, { ok: true, id: 'm9', threadId: 't9' });
+    assert.equal(env.storageOps.set, 1);
+    assert.deepEqual(env.store.relayMsg_t9, [{ id: 'm9', threadId: 't9', senderId: 'me', body: 'yo', sentAt: '2026-11-08T11:00:00.000Z', fromMe: true, read: false }]);
+    assert.deepEqual(env.store.relayThreads, [{ id: 't9', contactId: 'p1', contactName: 'Pat', lastMessage: 'yo', lastAt: '2026-11-08T11:00:00.000Z', unreadCount: 3 }]);
 });
