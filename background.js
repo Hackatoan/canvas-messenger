@@ -52,6 +52,14 @@ function connectSignaling() {
             // `from`/`fromName` stamped on); the in-page toast handles it as
             // 'incoming-call'. Without this mapping incoming calls never rang.
             if (msg.type === 'call-request') msg = { ...msg, type: 'incoming-call' };
+            // A busy callee declines immediately, usually before our own call
+            // window has registered, so the decline lands on this socket rather
+            // than the window's. Hand it to the window via session storage
+            // (call.js watches `callDeclined_<peer>`; initCall clears it first).
+            if (msg.type === 'call-declined' && msg.from != null) {
+                chrome.storage.session.set({ [`callDeclined_${msg.from}`]: Date.now() }).catch(() => {});
+                return;
+            }
             if (msg.type === 'incoming-call' || msg.type === 'call-failed') {
                 broadcastToTabs('cm-call-event', msg);
             }
@@ -68,6 +76,27 @@ function connectSignaling() {
         };
     } catch {}
 }
+
+// A call window opens its own signaling socket and registers with our userId,
+// and cm-signaling routes each user to their most recently registered socket
+// (deleting the entry when that socket closes). Once the call window is gone,
+// this socket is still OPEN — so connectSignaling() is a no-op — but no longer
+// routable, and every later call-request would be lost. Re-register on the
+// existing socket so it becomes the routable one again.
+function reRegisterSignaling() {
+    if (sigWs && sigWs.readyState === WebSocket.OPEN) sigWs.onopen();
+    else connectSignaling();
+}
+
+// Window ids of open call windows, persisted in session storage so a Chrome
+// service-worker restart mid-call doesn't forget them.
+chrome.windows.onRemoved.addListener(async (windowId) => {
+    const key = `callWindow_${windowId}`;
+    const stored = await chrome.storage.session.get(key).catch(() => ({}));
+    if (!stored[key]) return;
+    await chrome.storage.session.remove(key).catch(() => {});
+    reRegisterSignaling();
+});
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
@@ -301,7 +330,8 @@ async function openCallWindow(peerId, peerName, isInitiator) {
     const token = crypto.randomUUID();
     await chrome.storage.session.set({ [`callToken_${token}`]: true });
     const url = chrome.runtime.getURL(`call.html?peerId=${encodeURIComponent(peerId)}&peerName=${encodeURIComponent(peerName)}&initiator=${isInitiator}&token=${token}`);
-    await chrome.windows.create({ url, type: 'popup', width: 720, height: 500 });
+    const win = await chrome.windows.create({ url, type: 'popup', width: 720, height: 500 });
+    if (win?.id != null) await chrome.storage.session.set({ [`callWindow_${win.id}`]: true });
 }
 
 async function signalingRequest(msg) {
@@ -686,7 +716,8 @@ async function handleMessage(msg, sender = {}) {
             });
             return { ok: true };
         }
-        case 'initCall':           await signalingRequest({ type: 'call-request', to: msg.peerId, fromName: msg.fromName }); return openCallWindow(msg.peerId, msg.peerName, true);
+        case 'initCall':           await chrome.storage.session.remove(`callDeclined_${msg.peerId}`).catch(() => {});
+                                   await signalingRequest({ type: 'call-request', to: msg.peerId, fromName: msg.fromName }); return openCallWindow(msg.peerId, msg.peerName, true);
         case 'acceptCall':         await openCallWindow(msg.peerId, msg.peerName, false); return { ok: true };
         case 'declineCall':        await signalingRequest({ type: 'call-declined', to: msg.peerId }); return { ok: true };
         case 'captureTab':         return new Promise(resolve => chrome.tabs.captureVisibleTab(null, { format: 'png' }, dataUrl => resolve({ dataUrl: dataUrl || null })));
