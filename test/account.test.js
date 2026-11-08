@@ -272,3 +272,12 @@ test('google: a new Google account on a connected device backs the Canvas token 
     assert.equal(linked, true);
     assert.deepEqual({ linked: r.linked, restored: r.restored }, { linked: true, restored: false });
 });
+
+test('restore refuses a plaintext-HTTP Canvas address and never sends the token there', async () => {
+    const { api, store, calls } = load({ routes: [['accounts:signInWithPassword', () => fbOk()],
+        ['/account/login', () => ({ status: 200, body: { id: 'u1', authToken: 't', name: 'A', keypair: KEYPAIR, canvas: { url: 'http://s.edu', userId: '1', token: 'CT' } } })]] });
+    store.apiToken = 'KEEP-ME';
+    await assert.rejects(api.accountSignIn({ email: 'a@x.edu', password: 'pw1234' }), /isn't HTTPS/);
+    assert.equal(store.apiToken, 'KEEP-ME');
+    assert.ok(!calls.some(c => c.url.startsWith('http://s.edu')));
+});
