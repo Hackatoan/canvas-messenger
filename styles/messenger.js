@@ -825,7 +825,7 @@ class CanvasMessenger {
                                     <div style="font-size:14px;font-weight:600;color:#f2f3f5">${escHtml(m.name)}</div>
                                     <div style="font-size:12px;color:#87898c">${escHtml(m.login_id || '')}</div>
                                 </div>
-                                <button class="cm-icon-btn cm-dm-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" title="Send direct message" aria-label="Send direct message to ${escHtml(m.name)}" style="padding:6px 10px;gap:4px;font-size:12px">
+                                <button class="cm-icon-btn cm-dm-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" title="Send direct message" aria-label="DM ${escHtml(m.name)}" style="padding:6px 10px;gap:4px;font-size:12px">
                                     DM
                                 </button>
                             </div>
