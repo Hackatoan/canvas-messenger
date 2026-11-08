@@ -825,7 +825,7 @@ class CanvasMessenger {
                                     <div style="font-size:14px;font-weight:600;color:#f2f3f5">${escHtml(m.name)}</div>
                                     <div style="font-size:12px;color:#87898c">${escHtml(m.login_id || '')}</div>
                                 </div>
-                                <button class="cm-icon-btn cm-dm-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" title="Send direct message" style="padding:6px 10px;gap:4px;font-size:12px">
+                                <button class="cm-icon-btn cm-dm-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" title="Send direct message" aria-label="Send direct message to ${escHtml(m.name)}" style="padding:6px 10px;gap:4px;font-size:12px">
                                     DM
                                 </button>
                             </div>
@@ -1793,7 +1793,7 @@ class CanvasMessenger {
                                 <div class="cm-search-result-name">${escHtml(u.name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.email || '')}</div>
                             </div>
-                            <button class="cm-btn-primary cm-relay-add-btn" style="font-size:11px;padding:4px 10px;flex-shrink:0">Add</button>
+                            <button class="cm-btn-primary cm-relay-add-btn" aria-label="Add ${escHtml(u.name)}" style="font-size:11px;padding:4px 10px;flex-shrink:0">Add</button>
                         </div>`).join('');
                     searchResults.style.display = 'block';
                     searchResults.querySelectorAll('.cm-relay-add-btn').forEach(btn => {
