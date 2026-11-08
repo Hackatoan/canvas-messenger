@@ -373,10 +373,29 @@ async function getRelayContacts() {
     return new Promise(r => chrome.storage.local.get('relayContacts', d => r(d.relayContacts || [])));
 }
 
+// Pure merge of one message into the relayThreads list (shared by the live
+// receive/send paths so they can fold it into a single storage write).
+function mergeRelayThread(threads, contacts, threadId, otherUserId, lastBody, lastAt, incUnread) {
+    const idx = threads.findIndex(t => t.id === threadId);
+    if (idx >= 0) {
+        threads[idx].lastMessage = lastBody;
+        threads[idx].lastAt = lastAt;
+        if (incUnread) threads[idx].unreadCount = (threads[idx].unreadCount || 0) + 1;
+    } else {
+        const c = contacts.find(x => x.id === otherUserId);
+        threads.push({ id: threadId, contactId: otherUserId, contactName: c?.name || 'Unknown',
+            lastMessage: lastBody, lastAt, unreadCount: incUnread ? 1 : 0 });
+    }
+    return threads;
+}
+
+// Live paths used to do ~6 serialized chrome.storage round trips per message
+// (profile, contacts, relayMsg_* get+set, relayThreads get+set). Read the
+// related keys together and write the message list + thread list in one set.
 async function storeRelayMessage(msg) {
-    const profile = await getRelayProfile();
+    const { relayProfile: profile, relayContacts } = await storageGet(['relayProfile', 'relayContacts']);
     if (!profile) return;
-    const contacts = await getRelayContacts();
+    const contacts = relayContacts || [];
     const senderId = msg.senderId;
     const sender = contacts.find(c => c.id === senderId);
     let body = '[Encrypted — add this contact to decrypt]';
@@ -384,29 +403,16 @@ async function storeRelayMessage(msg) {
         try { body = await relayDecrypt(msg.encryptedBody, msg.iv, profile.privateKeyJwk, sender.publicKeyJwk); } catch {}
     }
     const key = `relayMsg_${msg.threadId}`;
-    const stored = await new Promise(r => chrome.storage.local.get(key, d => r(d[key] || [])));
+    const data = await storageGet([key, 'relayThreads']);
+    const stored = data[key] || [];
+    const toWrite = {};
     if (!stored.find(m => m.id === msg.id)) {
         stored.push({ id: msg.id, threadId: msg.threadId, senderId, body, sentAt: msg.sentAt, fromMe: false });
         if (stored.length > 1000) stored.splice(0, stored.length - 1000);
-        await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
+        toWrite[key] = stored;
     }
-    await updateRelayThread(msg.threadId, senderId, body, msg.sentAt, true);
-}
-
-async function updateRelayThread(threadId, otherUserId, lastBody, lastAt, incUnread) {
-    const threads = await new Promise(r => chrome.storage.local.get('relayThreads', d => r(d.relayThreads || [])));
-    const idx = threads.findIndex(t => t.id === threadId);
-    if (idx >= 0) {
-        threads[idx].lastMessage = lastBody;
-        threads[idx].lastAt = lastAt;
-        if (incUnread) threads[idx].unreadCount = (threads[idx].unreadCount || 0) + 1;
-    } else {
-        const contacts = await getRelayContacts();
-        const c = contacts.find(x => x.id === otherUserId);
-        threads.push({ id: threadId, contactId: otherUserId, contactName: c?.name || 'Unknown',
-            lastMessage: lastBody, lastAt, unreadCount: incUnread ? 1 : 0 });
-    }
-    await new Promise(r => chrome.storage.local.set({ relayThreads: threads }, r));
+    toWrite.relayThreads = mergeRelayThread(data.relayThreads || [], contacts, msg.threadId, senderId, body, msg.sentAt, true);
+    await storageSet(toWrite);
 }
 
 async function relayRegister({ name, email }) {
@@ -479,10 +485,13 @@ async function relaySendMessage({ recipientId, body }) {
     if (!res.ok) throw new Error(`Send failed: ${res.status}`);
     const { id, threadId, sentAt } = await res.json();
     const key = `relayMsg_${threadId}`;
-    const stored = await new Promise(r => chrome.storage.local.get(key, d => r(d[key] || [])));
+    const data = await storageGet([key, 'relayThreads']);
+    const stored = data[key] || [];
     stored.push({ id, threadId, senderId: profile.id, body, sentAt, fromMe: true, read: false });
-    await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
-    await updateRelayThread(threadId, recipientId, body, sentAt, false);
+    await storageSet({
+        [key]: stored,
+        relayThreads: mergeRelayThread(data.relayThreads || [], contacts, threadId, recipientId, body, sentAt, false),
+    });
     return { ok: true, id, threadId };
 }
 
@@ -521,7 +530,7 @@ async function syncRelayMessages() {
 
         // Catch-up syncs after being offline can carry many messages across
         // many threads. The old code did a chrome.storage.local get+set per
-        // message (plus another get+set inside updateRelayThread) — each a
+        // message (plus another get+set for the relayThreads list) — each a
         // serialized round trip to the storage backend. Batch every affected
         // relayMsg_* key into one read and one write instead, and fold the
         // relayThreads update into the same in-memory pass.
@@ -544,7 +553,7 @@ async function syncRelayMessages() {
             stored.push({ id: msg.id, threadId: msg.threadId, senderId: msg.senderId, body, sentAt: msg.sentAt, fromMe, read: !!msg.readAt });
             toWrite[key] = stored;
 
-            // Mirrors updateRelayThread()'s merge logic, applied in-memory.
+            // Mirrors mergeRelayThread()'s logic, applied in-memory.
             const t = threadMap.get(msg.threadId);
             if (t) {
                 t.lastMessage = body;
