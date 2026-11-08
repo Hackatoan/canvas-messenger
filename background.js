@@ -67,6 +67,17 @@ function connectSignaling() {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
+// The Canvas API token is a full-account bearer credential — never send it
+// over plaintext HTTP. Real Canvas instances are always HTTPS; plain http is
+// only allowed for a local dev instance.
+function isSecureCanvasUrl(u) {
+    try {
+        const { protocol, hostname } = new URL(u);
+        return protocol === 'https:' ||
+            (protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(hostname));
+    } catch { return false; }
+}
+
 async function getSettings() {
     return new Promise(resolve => {
         chrome.storage.local.get(['canvasUrl', 'apiToken', 'currentUser'], resolve);
@@ -78,6 +89,7 @@ async function getSettings() {
 async function canvasFetch(path, opts = {}) {
     const { canvasUrl, apiToken } = await getSettings();
     if (!canvasUrl || !apiToken) throw new Error('NOT_CONFIGURED');
+    if (!isSecureCanvasUrl(canvasUrl)) throw new Error('INSECURE_CANVAS_URL');
 
     const url = `${canvasUrl.replace(/\/$/, '')}/api/v1${path}`;
     const controller = new AbortController();
@@ -203,13 +215,24 @@ async function createDiscussion(courseId, title) {
     });
 }
 
-async function findOrCreateClassChat(courseId) {
+// Finding the class-chat topic means listing up to 50 discussion topics —
+// full HTML bodies included — on every class-chat open. Remember the topic
+// id per Canvas host + course; callers only need `id`. `fresh` bypasses the
+// cache (messenger.js retries with it if the cached topic 404s).
+const CLASS_CHAT_CACHE = 'cmClassChatTopics';
+
+async function findOrCreateClassChat(courseId, { fresh = false } = {}) {
+    const { [CLASS_CHAT_CACHE]: cache = {}, canvasUrl } = await storageGet([CLASS_CHAT_CACHE, 'canvasUrl']);
+    const ck = `${canvasUrl}|${courseId}`;
+    if (!fresh && cache[ck] != null) return { id: cache[ck] };
+
     const discussions = await getDiscussions(courseId);
     const existing = discussions.find(d =>
         d.title === '📣 Class Chat' || d.title === 'Class Chat'
     );
-    if (existing) return existing;
-    return createDiscussion(courseId, '📣 Class Chat');
+    const topic = existing || await createDiscussion(courseId, '📣 Class Chat');
+    if (topic?.id != null) await storageSet({ [CLASS_CHAT_CACHE]: { ...cache, [ck]: topic.id } });
+    return topic;
 }
 
 async function markRead(id) {
@@ -228,6 +251,7 @@ async function getCurrentUser() {
 async function uploadCanvasFile(base64Data, filename = 'screenshot.png', contentType = 'image/png') {
     const { canvasUrl, apiToken } = await getSettings();
     if (!canvasUrl || !apiToken) throw new Error('NOT_CONFIGURED');
+    if (!isSecureCanvasUrl(canvasUrl)) throw new Error('INSECURE_CANVAS_URL');
 
     // Convert base64 data URL to blob bytes
     const base64 = base64Data.replace(/^data:[^;]+;base64,/, '');
@@ -350,19 +374,36 @@ async function markRelayThreadRead(threadId, readAt) {
     if (changed) await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
 }
 
+// ECDH import + deriveKey is by far the costly part of each message (~10x
+// the AES-GCM op itself), and the result only depends on the (our key, peer
+// key) pair — so derive once per pair and reuse. Keyed on public
+// coordinates only; the derived CryptoKey is non-extractable and in-memory.
+const relayKeyCache = new Map();
+async function relaySharedKey(privateJwk, peerPublicJwk) {
+    const id = `${privateJwk.x}|${privateJwk.y}|${peerPublicJwk.x}|${peerPublicJwk.y}`;
+    let p = relayKeyCache.get(id);
+    if (!p) {
+        p = (async () => {
+            const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
+            const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+            return crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+        })();
+        p.catch(() => relayKeyCache.delete(id)); // bad key material: don't cache the failure
+        if (relayKeyCache.size >= 256) relayKeyCache.clear();
+        relayKeyCache.set(id, p);
+    }
+    return p;
+}
+
 async function relayDecrypt(encB64, ivB64, privateJwk, peerPublicJwk) {
-    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
-    const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-    const key  = await crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const key  = await relaySharedKey(privateJwk, peerPublicJwk);
     const dec  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: Uint8Array.from(atob(ivB64), c => c.charCodeAt(0)) }, key,
         Uint8Array.from(atob(encB64), c => c.charCodeAt(0)));
     return new TextDecoder().decode(dec);
 }
 
 async function relayEncrypt(plaintext, privateJwk, peerPublicJwk) {
-    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
-    const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-    const key  = await crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const key  = await relaySharedKey(privateJwk, peerPublicJwk);
     const iv   = crypto.getRandomValues(new Uint8Array(12));
     const enc  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext));
     const b64  = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -582,8 +623,11 @@ async function syncRelayMessages() {
 async function updateBadge() {
     let count = 0;
     try {
-        const conversations = await getConversations('unread');
-        count = Array.isArray(conversations) ? conversations.length : 0;
+        // Canvas's dedicated counter returns {"unread_count":"N"} — far
+        // lighter than pulling 50 full conversation objects every minute
+        // just to take .length (and not capped at 50 either).
+        const { unread_count } = await canvasFetch('/conversations/unread_count');
+        count = Math.max(0, parseInt(unread_count, 10) || 0);
         chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
         chrome.action.setBadgeBackgroundColor({ color: '#5865F2' });
     } catch {
@@ -622,12 +666,22 @@ async function handleMessage(msg, sender = {}) {
         case 'getDiscussions':        return getDiscussions(msg.courseId);
         case 'getDiscussionEntries':  return getDiscussionEntries(msg.courseId, msg.topicId);
         case 'createDiscussionEntry': return createDiscussionEntry(msg.courseId, msg.topicId, msg.message);
-        case 'findOrCreateClassChat': return findOrCreateClassChat(msg.courseId);
+        case 'findOrCreateClassChat': return findOrCreateClassChat(msg.courseId, { fresh: !!msg.fresh });
         case 'markRead':           return markRead(msg.id);
         case 'getSettings':        return getSettings();
         case 'getCurrentUser':     return getCurrentUser();
         case 'updateBadge':        return updateBadge();
         case 'openSettings':       chrome.runtime.openOptionsPage(); return { ok: true };
+        case 'injectMessengerUI': {
+            // Lazy-load the sidebar UI into the content script's isolated
+            // world for the tab that asked (see content.js) — fixed file only.
+            if (!sender.tab?.id) throw new Error('No sender tab');
+            await chrome.scripting.executeScript({
+                target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] },
+                files: ['styles/messenger.js'],
+            });
+            return { ok: true };
+        }
         case 'initCall':           await signalingRequest({ type: 'call-request', to: msg.peerId, fromName: msg.fromName }); return openCallWindow(msg.peerId, msg.peerName, true);
         case 'acceptCall':         await openCallWindow(msg.peerId, msg.peerName, false); return { ok: true };
         case 'declineCall':        await signalingRequest({ type: 'call-declined', to: msg.peerId }); return { ok: true };
@@ -906,6 +960,7 @@ async function accountLink() {
 // Apply what the relay returned for a sign-in on a (possibly brand-new) device.
 async function accountRestore(d) {
     if (!d.canvas?.token || !d.canvas?.url) throw new Error('Your account has no saved Canvas connection yet. Connect on your other device first.');
+    if (!isSecureCanvasUrl(d.canvas.url)) throw new Error('Your saved Canvas address isn\'t HTTPS — reconnect Canvas on this device instead.');
     if (!d.keypair?.publicKeyJwk || !d.keypair?.privateKeyJwk) throw new Error('Your account has no saved encryption keys. Open the extension on your original device once, then try again.');
 
     let currentUser = { id: d.canvas.userId, name: d.name };

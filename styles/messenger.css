@@ -274,6 +274,9 @@
     color: #f2f3f5;
 }
 
+/* Indented to line up with the message text (36px avatar + 12px gap). */
+.cm-msg-failed { font-size: 11px; color: #ed4245; margin-top: 2px; padding-left: 48px; }
+
 .cm-msg-timestamp {
     font-size: 11px;
     color: #87898c;
@@ -571,6 +574,12 @@
     color: #87898c;
     font-size: 13px;
     gap: 8px;
+}
+
+/* Text for screen readers only (e.g. label for an icon-only spinner). */
+.cm-sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
 .cm-spinner {

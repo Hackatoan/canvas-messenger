@@ -24,7 +24,7 @@ const API = {
     getCourseUsers:         (courseId, role)          => API.send('getCourseUsers',         { courseId, role }),
     getDiscussionEntries:   (courseId, topicId)       => API.send('getDiscussionEntries',   { courseId, topicId }),
     createDiscussionEntry:  (courseId, topicId, message) => API.send('createDiscussionEntry', { courseId, topicId, message }),
-    findOrCreateClassChat:  (courseId)                => API.send('findOrCreateClassChat',  { courseId }),
+    findOrCreateClassChat:  (courseId, fresh = false) => API.send('findOrCreateClassChat',  { courseId, fresh }),
     markRead:               (id)                      => API.send('markRead',               { id }),
     getSettings:      ()              => API.send('getSettings'),
     getCurrentUser:   ()              => API.send('getCurrentUser'),
@@ -51,20 +51,44 @@ function avatarColor(name = '') {
     return colors[Math.abs(h) % colors.length];
 }
 
+// Date#toLocale*String(locale, options) builds a fresh Intl.DateTimeFormat on
+// every call (~0.07 ms each in Chrome) — a 1000-message relay thread spent
+// ~65 ms of main thread just on timestamps. Same locale/options, built once.
+const DATE_FMT = {};
+function dateFmt(name, opts, d) {
+    // format() throws on an invalid Date where toLocale*String returned
+    // "Invalid Date" — keep the old output for missing/bad timestamps.
+    if (isNaN(d)) return 'Invalid Date';
+    return (DATE_FMT[name] || (DATE_FMT[name] = new Intl.DateTimeFormat([], opts))).format(d);
+}
+
 function relativeTime(iso) {
     const d = new Date(iso);
     const now = new Date();
     const diff = (now - d) / 1000;
     if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diff < 86400 * 7) return d.toLocaleDateString([], { weekday: 'short' });
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    if (diff < 86400) return dateFmt('time', { hour: '2-digit', minute: '2-digit' }, d);
+    if (diff < 86400 * 7) return dateFmt('weekday', { weekday: 'short' }, d);
+    return dateFmt('monthDay', { month: 'short', day: 'numeric' }, d);
 }
 
 function fullTime(iso) {
     const d = new Date(iso);
-    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return dateFmt('full', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }, d);
+}
+
+// Dim an optimistic message bubble whose send failed and put a visible,
+// announced "Not sent" note under it (outside the dimmed bubble so it stays
+// readable) instead of relying on a hover-only tooltip.
+function markSendFailed(bubble, reason) {
+    bubble.style.opacity = '0.4';
+    bubble.title = 'Failed to send: ' + reason;
+    const fail = document.createElement('div');
+    fail.className = 'cm-msg-failed';
+    fail.setAttribute('role', 'alert');
+    fail.textContent = `Not sent — ${reason}`;
+    bubble.after(fail);
 }
 
 // Let keyboard users open a click-only list row: focusable, Enter/Space click it.
@@ -124,6 +148,7 @@ function stripHtml(html) {
 function mkAvatar(name, size = 36) {
     const el = document.createElement('div');
     el.className = 'cm-avatar';
+    el.setAttribute('aria-hidden', 'true'); // initials duplicate the name shown next to it
     el.style.width = size + 'px';
     el.style.height = size + 'px';
     el.style.fontSize = Math.floor(size * 0.36) + 'px';
@@ -153,7 +178,7 @@ class CanvasMessenger {
     }
 
     async render() {
-        this.root.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading…</div>';
+        this.root.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading…</div>';
         try {
             const settings = await API.getSettings();
             if (!settings.canvasUrl || !settings.apiToken) {
@@ -214,7 +239,7 @@ class CanvasMessenger {
                         <button class="cm-tab" data-tab="connect" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Connect</button>
                     </div>
                     <div class="cm-conv-list" id="cm-conv-list" role="tabpanel">
-                        <div class="cm-loading"><div class="cm-spinner"></div></div>
+                        <div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>
                     </div>
                 </div>
                 <div class="cm-main" id="cm-main">
@@ -280,7 +305,7 @@ class CanvasMessenger {
     // ── Conversation list ──────────────────────────────────────────────────
 
     async loadConversations() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         try {
             this.conversations = await API.getConversations(this.tab);
             this.renderConvList();
@@ -322,7 +347,7 @@ class CanvasMessenger {
                 <div class="cm-conv-subject">${escHtml(conv.subject || '(no subject)')}</div>
                 <div class="cm-conv-preview">${escHtml(conv.last_message || '')}</div>
             </div>
-            ${isUnread ? '<div class="cm-unread-dot"></div>' : ''}`;
+            ${isUnread ? '<div class="cm-unread-dot"><span class="cm-sr-only">Unread</span></div>' : ''}`;
 
         const avatarSlot = el.querySelector('div[style]');
         avatarSlot.replaceWith(mkAvatar(displayName));
@@ -343,7 +368,7 @@ class CanvasMessenger {
     // ── Conversation view ──────────────────────────────────────────────────
 
     async openConversation(id, subject, withName) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading messages…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading messages…</div>';
         try {
             const conv = await API.getConversation(id);
             this.renderConversation(conv, subject, withName);
@@ -378,7 +403,7 @@ class CanvasMessenger {
             return `
                 <div class="cm-msg-group">
                     <div class="cm-msg-group-avatar">
-                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(author.name)}">${escHtml(initials(author.name))}</div>
+                        <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(author.name)}">${escHtml(initials(author.name))}</div>
                     </div>
                     <div class="cm-msg-group-body">
                         <div class="cm-msg-group-header">
@@ -471,7 +496,7 @@ class CanvasMessenger {
         bubble.className = 'cm-msg-group';
         bubble.innerHTML = `
             <div class="cm-msg-group-avatar">
-                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
+                <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
             </div>
             <div class="cm-msg-group-body">
                 <div class="cm-msg-group-header">
@@ -495,8 +520,7 @@ class CanvasMessenger {
             }
             this.loadConversations();
         } catch (e) {
-            bubble.style.opacity = '0.4';
-            bubble.title = 'Failed to send: ' + e.message;
+            markSendFailed(bubble, e.message);
         }
     }
 
@@ -533,7 +557,7 @@ class CanvasMessenger {
     // ── Classes tab ────────────────────────────────────────────────────────
 
     async loadClasses() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         this.stopClassChatPoll();
         try {
             const courses = await API.getCourses();
@@ -573,12 +597,18 @@ class CanvasMessenger {
 
     async openClassChat(course) {
         this.stopClassChatPoll();
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Setting up class chat…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Setting up class chat…</div>';
         try {
-            const topic = await API.findOrCreateClassChat(course.id);
+            let topic = await API.findOrCreateClassChat(course.id);
             this.classChatTopic = topic;
             this.classChatCourse = course;
-            await this.renderClassChat(course, topic, true);
+            const err = await this.renderClassChat(course, topic, true);
+            if (err === 'API_ERROR:404') {
+                // Cached topic id is stale (topic deleted) — rediscover once.
+                topic = await API.findOrCreateClassChat(course.id, true);
+                this.classChatTopic = topic;
+                await this.renderClassChat(course, topic, true);
+            }
             // Poll for new messages every 20s while the chat is open
             this.classChatPollTimer = setInterval(() => this.refreshClassChat(), 20000);
         } catch (e) {
@@ -592,7 +622,7 @@ class CanvasMessenger {
             entries = await API.getDiscussionEntries(course.id, topic.id);
         } catch (e) {
             this.$main.innerHTML = `<div class="cm-error">${escHtml(e.message)}</div>`;
-            return;
+            return e.message;
         }
 
         // Sort oldest first
@@ -617,7 +647,7 @@ class CanvasMessenger {
             return `
                 <div class="cm-msg-group">
                     <div class="cm-msg-group-avatar">
-                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
+                        <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
                     </div>
                     <div class="cm-msg-group-body">
                         <div class="cm-msg-group-header">
@@ -700,7 +730,7 @@ class CanvasMessenger {
         bubble.className = 'cm-msg-group';
         bubble.innerHTML = `
             <div class="cm-msg-group-avatar">
-                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
+                <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
             </div>
             <div class="cm-msg-group-body">
                 <div class="cm-msg-group-header">
@@ -715,8 +745,7 @@ class CanvasMessenger {
         try {
             await API.createDiscussionEntry(this.classChatCourse.id, this.classChatTopic.id, message);
         } catch (e) {
-            bubble.style.opacity = '0.4';
-            bubble.title = 'Failed: ' + e.message;
+            markSendFailed(bubble, e.message);
         }
     }
 
@@ -744,7 +773,7 @@ class CanvasMessenger {
     // ── Groups tab ─────────────────────────────────────────────────────────
 
     async loadGroups() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         try {
             const groups = await API.getGroups();
             if (!groups.length) {
@@ -783,7 +812,7 @@ class CanvasMessenger {
     }
 
     async openGroupView(group) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading members…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading members…</div>';
         try {
             const members = await API.getGroupUsers(group.id);
             const others = members.filter(m => m.id !== (this.currentUser && this.currentUser.id));
@@ -801,14 +830,14 @@ class CanvasMessenger {
                     ${members.map(m => `
                         <div class="cm-msg-group" style="margin-top:8px">
                             <div class="cm-msg-group-avatar">
-                                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(m.name)}">${escHtml(initials(m.name))}</div>
+                                <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(m.name)}">${escHtml(initials(m.name))}</div>
                             </div>
                             <div class="cm-msg-group-body" style="display:flex;align-items:center;justify-content:space-between">
                                 <div>
                                     <div style="font-size:14px;font-weight:600;color:#f2f3f5">${escHtml(m.name)}</div>
                                     <div style="font-size:12px;color:#87898c">${escHtml(m.login_id || '')}</div>
                                 </div>
-                                <button class="cm-icon-btn cm-dm-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" title="Send direct message" style="padding:6px 10px;gap:4px;font-size:12px">
+                                <button class="cm-icon-btn cm-dm-btn" data-id="${m.id}" data-name="${escHtml(m.name)}" title="Send direct message" aria-label="DM ${escHtml(m.name)}" style="padding:6px 10px;gap:4px;font-size:12px">
                                     DM
                                 </button>
                             </div>
@@ -847,7 +876,7 @@ class CanvasMessenger {
             this.renderComposeForm();
             return;
         }
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading courses…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading courses…</div>';
         try {
             this.courses = await API.getCourses();
         } catch {
@@ -951,6 +980,7 @@ class CanvasMessenger {
             btn.addEventListener('click', () => {
                 this.recipients = this.recipients.filter(r => r.id !== btn.dataset.id);
                 btn.closest('.cm-recipient-tag').remove();
+                box.querySelector('#cm-recipient-input')?.focus(); // removed tag had focus
             });
         });
 
@@ -980,6 +1010,7 @@ class CanvasMessenger {
                 tag.querySelector('button').addEventListener('click', () => {
                     this.recipients = this.recipients.filter(x => x.id !== r.id);
                     renderRecipients();
+                    input.focus(); // removed tag had focus
                 });
                 box.insertBefore(tag, input);
             }
@@ -994,10 +1025,14 @@ class CanvasMessenger {
                     const ctx = getContext(); // optional course narrowing
                     const data = await API.searchRecipients(q, ctx);
                     const users = Array.isArray(data) ? data : (data.users || []);
-                    if (!users.length) { results.style.display = 'none'; return; }
+                    if (!users.length) {
+                        results.innerHTML = `<div class="cm-empty" role="status">No one found for “${escHtml(q)}”</div>`;
+                        results.style.display = 'block';
+                        return;
+                    }
                     results.innerHTML = users.slice(0, 10).map(u => `
                         <div class="cm-search-result" data-id="${escHtml(u.id)}" data-name="${escHtml(u.name || u.full_name)}">
-                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${escHtml(initials(u.name || u.full_name))}</div>
+                            <div class="cm-avatar" aria-hidden="true" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${escHtml(initials(u.name || u.full_name))}</div>
                             <div>
                                 <div class="cm-search-result-name">${escHtml(u.name || u.full_name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.common_courses ? 'Student/Instructor' : '')}</div>
@@ -1043,6 +1078,14 @@ class CanvasMessenger {
         }
 
         box.addEventListener('click', () => input.focus());
+        // Escape dismisses the suggestions from the input or a focused suggestion.
+        [input, results].forEach(el => el.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || results.style.display === 'none') return;
+            e.preventDefault();
+            e.stopPropagation(); // keep the sidebar open
+            results.style.display = 'none';
+            input.focus();
+        }));
     }
 
     async doSendNew() {
@@ -1189,7 +1232,7 @@ class CanvasMessenger {
     }
 
     async dmContact(contact) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Looking up on Canvas…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Looking up on Canvas…</div>';
         this.recipients = [];
 
         const trySearch = async (term) => {
@@ -1295,7 +1338,7 @@ class CanvasMessenger {
     // ── Cross-campus relay (Connect tab) ───────────────────────────────────
 
     async loadRelayTab() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         this._removeRelayListener();
 
         const profile = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetProfile' }, r));
@@ -1401,7 +1444,7 @@ class CanvasMessenger {
                     </div>
                     <div class="cm-conv-preview">${escHtml(thread.lastMessage || '')}</div>
                 </div>
-                ${thread.unreadCount ? '<div class="cm-unread-dot"></div>' : ''}`;
+                ${thread.unreadCount ? '<div class="cm-unread-dot"><span class="cm-sr-only">Unread</span></div>' : ''}`;
             const avatar = mkAvatar(thread.contactName);
             avatar.style.position = 'relative';
             el.querySelector('.cm-relay-av-slot').replaceWith(avatar);
@@ -1427,19 +1470,33 @@ class CanvasMessenger {
         // Client-side search across cached thread names + stored message bodies
         const searchInput = searchWrap.querySelector('#cm-relay-msg-search');
         let searchDebounce;
+        // Every stored message of every thread (up to 1000 each) is read from
+        // storage to search. Load that once per typing session instead of on
+        // every debounced keystroke; drop it on refocus, when the box is
+        // cleared, or when a new relay message arrives so results stay fresh.
+        let searchData = null;
+        const loadSearchData = () => searchData ||= (async () => {
+            const keys = threads.map(t => `relayMsg_${t.id}`);
+            return keys.length ? new Promise(r => chrome.storage.local.get(keys, r)) : {};
+        })();
+        this._relaySearchAbort?.abort();
+        this._relaySearchAbort = new AbortController();
+        relayBus.addEventListener('cm-relay-msg', () => { searchData = null; }, { signal: this._relaySearchAbort.signal });
+        searchInput.addEventListener('focus', () => { searchData = null; });
         searchInput.addEventListener('input', () => {
             clearTimeout(searchDebounce);
             const q = searchInput.value.trim().toLowerCase();
             if (!q) {
+                searchData = null;
                 listWrap.style.display = '';
                 this.$convList.querySelector('#cm-relay-search-hits')?.remove();
                 return;
             }
-            searchDebounce = setTimeout(() => this.doRelaySearch(q, threads, profile, listWrap), 200);
+            searchDebounce = setTimeout(() => this.doRelaySearch(q, threads, profile, listWrap, loadSearchData), 200);
         });
     }
 
-    async doRelaySearch(q, threads, profile, listWrap) {
+    async doRelaySearch(q, threads, profile, listWrap, loadData) {
         listWrap.style.display = 'none';
         let resultsEl = this.$convList.querySelector('#cm-relay-search-hits');
         if (!resultsEl) {
@@ -1447,7 +1504,7 @@ class CanvasMessenger {
             resultsEl.id = 'cm-relay-search-hits';
             this.$convList.appendChild(resultsEl);
         }
-        resultsEl.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        resultsEl.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
 
         const matches = [];
         for (const t of threads) {
@@ -1455,8 +1512,7 @@ class CanvasMessenger {
                 matches.push({ thread: t, snippet: t.lastMessage || '', sentAt: t.lastAt || '' });
             }
         }
-        const keys = threads.map(t => `relayMsg_${t.id}`);
-        const data = keys.length ? await new Promise(r => chrome.storage.local.get(keys, r)) : {};
+        const data = await loadData();
         for (const t of threads) {
             const msgs = data[`relayMsg_${t.id}`] || [];
             for (const m of msgs) {
@@ -1494,7 +1550,7 @@ class CanvasMessenger {
     }
 
     async openRelayThread(thread, profile) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading…</div>';
         this._removeRelayListener();
         try {
             const messages  = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetMessages', threadId: thread.id }, r)) || [];
@@ -1509,15 +1565,15 @@ class CanvasMessenger {
     renderRelayChat(thread, contact, messages, profile) {
         const receiptHtml = m => !m.fromMe ? '' :
             (m.read
-                ? '<span class="cm-relay-receipt read" title="Read">✓✓</span>'
-                : '<span class="cm-relay-receipt" title="Sent">✓</span>');
+                ? '<span class="cm-relay-receipt read" title="Read" role="img" aria-label="Read">✓✓</span>'
+                : '<span class="cm-relay-receipt" title="Sent" role="img" aria-label="Sent">✓</span>');
 
         const renderMsg = m => {
             const isMe = m.fromMe;
             const name = isMe ? (profile.name || 'Me') : contact.name;
             return `<div class="cm-msg-group" data-relay-id="${escHtml(m.id)}">
                 <div class="cm-msg-group-avatar">
-                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
+                    <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
                 </div>
                 <div class="cm-msg-group-body">
                     <div class="cm-msg-group-header">
@@ -1544,7 +1600,7 @@ class CanvasMessenger {
                     </svg>
                 </button>
             </div>
-            <div class="cm-messages" id="cm-relay-messages">
+            <div class="cm-messages" id="cm-relay-messages" role="log" aria-label="Messages with ${escHtml(contact.name)}">
                 ${messages.map(renderMsg).join('') || '<div class="cm-empty">No messages yet — say hello!</div>'}
             </div>
             <div class="cm-typing-indicator" id="cm-relay-typing-indicator" style="display:none">${escHtml(contact.name)} is typing…</div>
@@ -1591,14 +1647,14 @@ class CanvasMessenger {
             bubble.className = 'cm-msg-group';
             bubble.innerHTML = `
                 <div class="cm-msg-group-avatar">
-                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
+                    <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
                 </div>
                 <div class="cm-msg-group-body">
                     <div class="cm-msg-group-header">
                         <span class="cm-msg-author" style="color:#5865f2">${escHtml(myName)}</span>
                         <span class="cm-msg-timestamp">Just now</span>
                         <span class="cm-relay-lock" title="End-to-end encrypted">🔒</span>
-                        <span class="cm-relay-receipt" title="Sent">✓</span>
+                        <span class="cm-relay-receipt" title="Sent" role="img" aria-label="Sent">✓</span>
                     </div>
                     <div class="cm-msg-bubble">${escHtml(body)}</div>
                 </div>`;
@@ -1607,7 +1663,7 @@ class CanvasMessenger {
                 await new Promise((resolve, reject) => chrome.runtime.sendMessage(
                     { action: 'relaySendMessage', recipientId: contact.id, body },
                     r => r?.ok ? resolve(r) : reject(new Error(r?.error || 'Send failed'))));
-            } catch (e) { bubble.style.opacity = '0.4'; bubble.title = 'Failed: ' + e.message; }
+            } catch (e) { markSendFailed(bubble, e.message); }
         };
         textarea.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
         sendBtn.addEventListener('click', doSend);
@@ -1651,6 +1707,7 @@ class CanvasMessenger {
                 el.textContent = '✓✓';
                 el.classList.add('read');
                 el.title = 'Read';
+                el.setAttribute('aria-label', 'Read');
             });
         };
         relayBus.addEventListener('cm-relay-read', this._relayReadListener);
@@ -1753,17 +1810,22 @@ class CanvasMessenger {
             debounce = setTimeout(async () => {
                 try {
                     const users = await new Promise(r => chrome.runtime.sendMessage({ action: 'relaySearchUsers', query: q }, r));
-                    if (!Array.isArray(users) || !users.length) { searchResults.style.display = 'none'; return; }
+                    if (!Array.isArray(users) || !users.length) {
+                        // Say so instead of silently hiding; point at the invite fallback below.
+                        searchResults.innerHTML = `<div class="cm-empty" role="status">No one found for “${escHtml(q)}”. Try an invite link instead.</div>`;
+                        searchResults.style.display = 'block';
+                        return;
+                    }
                     searchResultsData = {};
                     users.forEach(u => { searchResultsData[u.id] = u; });
                     searchResults.innerHTML = users.map(u => `
                         <div class="cm-search-result cm-relay-result" data-uid="${escHtml(u.id)}">
-                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${escHtml(initials(u.name))}</div>
+                            <div class="cm-avatar" aria-hidden="true" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${escHtml(initials(u.name))}</div>
                             <div style="flex:1;min-width:0">
                                 <div class="cm-search-result-name">${escHtml(u.name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.email || '')}</div>
                             </div>
-                            <button class="cm-btn-primary cm-relay-add-btn" style="font-size:11px;padding:4px 10px;flex-shrink:0">Add</button>
+                            <button class="cm-btn-primary cm-relay-add-btn" aria-label="Add ${escHtml(u.name)}" style="font-size:11px;padding:4px 10px;flex-shrink:0">Add</button>
                         </div>`).join('');
                     searchResults.style.display = 'block';
                     searchResults.querySelectorAll('.cm-relay-add-btn').forEach(btn => {

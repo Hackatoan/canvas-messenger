@@ -16,7 +16,9 @@
     const isCanvas = detectCanvas();
     const stored   = await new Promise(r => chrome.storage.local.get(['canvasUrl', 'apiToken'], r));
 
-    if (isCanvas && !stored.canvasUrl) {
+    // Only offer to trust an HTTPS origin — the API token is a bearer credential.
+    const secureOrigin = (location.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname));
+    if (isCanvas && secureOrigin && !stored.canvasUrl) {
         // detectCanvas() only looks at page-controlled signals (window.ENV,
         // DOM markup), which any site can fake. Once canvasUrl is saved, every
         // future API call — including the user's Canvas access token — is
@@ -123,6 +125,7 @@
     // declared here so applyFabPos() below can read it before toggle logic
     let isOpen = false;
     let lastUnread = null; // last unread count rendered (see renderBadge)
+    let appInit = null; // ensureApp() promise — UI is built on first open
 
     // ── FAB position helper ────────────────────────────────────────────────
     function applyFabPos() {
@@ -176,6 +179,7 @@
 
     function openPanel() {
         const viaKeyboard = !!keyboardLauncher();
+        const appReady = ensureApp();
         isOpen = true;
         host.classList.add('cm-open');
         document.body.classList.add('cm-panel-open');
@@ -186,7 +190,11 @@
         updateNavBtn();
         // Keyboard users land inside the panel (selected tab) instead of
         // having to Tab through the rest of the Canvas page to reach it.
-        if (viaKeyboard) (shadow.querySelector('.cm-tab[aria-selected="true"]') || shadow.querySelector('button'))?.focus();
+        // The UI is built lazily on first open (ensureApp), so wait for it before
+        // moving focus; skip if the panel was closed again in the meantime.
+        if (viaKeyboard) Promise.resolve(appReady).then(() => {
+            if (isOpen) (shadow.querySelector('.cm-tab[aria-selected="true"]') || shadow.querySelector('button'))?.focus();
+        }, () => {});
     }
     function closePanel() {
         const focusWasInPanel = !!shadow.activeElement;
@@ -268,8 +276,18 @@
     // ── Context menu (for FAB and nav button) ─────────────────────────────
     function showContextMenu(x, y, fromNav) {
         document.getElementById('cm-ctx-menu')?.remove();
+        const opener = document.activeElement;
+        // Opened from the keyboard (ContextMenu key / Shift+F10) on a
+        // keyboard-focused launcher: anchor to it and focus the first item.
+        const fromKeyboard = !!opener?.matches?.(':focus-visible');
+        if (fromKeyboard && opener?.getBoundingClientRect) {
+            const r = opener.getBoundingClientRect();
+            x = r.left; y = r.top;
+        }
         const menu = document.createElement('div');
         menu.id = 'cm-ctx-menu';
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', 'Canvas Messenger button options');
         Object.assign(menu.style, {
             position: 'fixed', zIndex: '100001',
             left: Math.min(x, window.innerWidth  - 185) + 'px',
@@ -294,6 +312,7 @@
         for (const item of items) {
             const btn = document.createElement('button');
             btn.textContent = item.label;
+            btn.setAttribute('role', 'menuitem');
             Object.assign(btn.style, {
                 display: 'block', width: '100%', textAlign: 'left',
                 background: 'none', border: 'none', color: '#dbdee1',
@@ -302,11 +321,28 @@
             });
             btn.addEventListener('mouseenter', () => btn.style.background = '#404249');
             btn.addEventListener('mouseleave', () => btn.style.background = 'none');
+            btn.addEventListener('focus', () => btn.style.background = '#404249');
+            btn.addEventListener('blur',  () => btn.style.background = 'none');
             btn.addEventListener('click', () => { menu.remove(); item.action(); });
             menu.appendChild(btn);
         }
 
+        menu.addEventListener('keydown', e => {
+            const btns = [...menu.querySelectorAll('button')];
+            const i = btns.indexOf(document.activeElement);
+            if (e.key === 'Escape' || e.key === 'Tab') {
+                e.preventDefault();
+                e.stopPropagation(); // don't also close the panel
+                menu.remove();
+                opener?.focus?.();
+            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                btns[(i + (e.key === 'ArrowDown' ? 1 : -1) + btns.length) % btns.length].focus();
+            }
+        });
+
         document.body.appendChild(menu);
+        if (fromKeyboard) menu.querySelector('button')?.focus();
         const dismiss = e => {
             if (!menu.contains(e.target)) {
                 menu.remove();
@@ -444,25 +480,48 @@
     handle.addEventListener('mouseenter', () => { handle.style.background = 'rgba(88,101,242,0.25)'; });
     handle.addEventListener('mouseleave', () => { handle.style.background = ''; });
 
-    // ── Load messenger CSS into shadow, init app ──────────────────────────
-    try {
-        const cssResp = await fetch(chrome.runtime.getURL('styles/messenger.css'));
-        if (!cssResp.ok) throw new Error(`CSS fetch ${cssResp.status}`);
-        const shadowStyle = document.createElement('style');
-        shadowStyle.textContent = await cssResp.text();
-        shadow.replaceChild(shadowStyle, loadingEl);
+    // ── Load messenger CSS into shadow, init app (on first open) ─────────
+    // Building the UI also fires Canvas API calls (users/self + the
+    // conversation list), and Canvas is a multi-page app — doing that on
+    // every page load wasted them whenever the panel stayed shut. Defer
+    // the whole thing until the panel is first opened; the spinner already
+    // in the shadow root covers the short wait.
+    function ensureApp() {
+        if (!appInit) appInit = initApp();
+        return appInit;
+    }
 
-        const appRoot = document.createElement('div');
-        appRoot.style.cssText = 'width:100%;height:100vh;overflow:hidden;';
-        shadow.appendChild(appRoot);
+    async function initApp() {
+        try {
+            // styles/messenger.js (~90 KB) is no longer a manifest content script
+            // — that parsed it on every website. Ask the background to inject it
+            // into this tab's isolated world only now, in parallel with the CSS
+            // fetch.
+            const uiReady = window.CanvasMessenger ? Promise.resolve() : new Promise((resolve, reject) =>
+                chrome.runtime.sendMessage({ action: 'injectMessengerUI' }, res => {
+                    if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+                    if (res?.error) return reject(new Error(res.error));
+                    resolve();
+                }));
+            const [cssResp] = await Promise.all([fetch(chrome.runtime.getURL('styles/messenger.css')), uiReady]);
+            if (!cssResp.ok) throw new Error(`CSS fetch ${cssResp.status}`);
+            if (!window.CanvasMessenger) throw new Error('Messenger UI script did not load');
+            const shadowStyle = document.createElement('style');
+            shadowStyle.textContent = await cssResp.text();
+            shadow.replaceChild(shadowStyle, loadingEl);
 
-        new window.CanvasMessenger(appRoot, { popup: false });
-    } catch (err) {
-        console.error('[Canvas Messenger] init failed:', err);
-        loadingEl.style.color = '#ed4245';
-        loadingEl.innerHTML   = `⚠ Canvas Messenger failed to load<br>
-            <small style="font-size:11px"></small>`;
-        loadingEl.querySelector('small').textContent = String(err?.message || err);
+            const appRoot = document.createElement('div');
+            appRoot.style.cssText = 'width:100%;height:100vh;overflow:hidden;';
+            shadow.appendChild(appRoot);
+
+            new window.CanvasMessenger(appRoot, { popup: false });
+        } catch (err) {
+            console.error('[Canvas Messenger] init failed:', err);
+            loadingEl.style.color = '#ed4245';
+            loadingEl.innerHTML   = `⚠ Canvas Messenger failed to load<br>
+                <small style="font-size:11px"></small>`;
+            loadingEl.querySelector('small').textContent = String(err?.message || err);
+        }
     }
 
     // ── Incoming call toast ───────────────────────────────────────────────

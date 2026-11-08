@@ -27,9 +27,21 @@ function redact(str) {
         document.querySelector('.ic-app-header, #ic-app-header-primary') ||
         document.querySelector('#application[data-account-id]')
     );
-    if (!isCanvas) return;
+    // Never set up (or save) a token for a plaintext-HTTP origin.
+    const secureOrigin = (location.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname));
+    if (!isCanvas || !secureOrigin) return;
 
-    const stored = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
+    const stored = await new Promise(r => chrome.storage.local.get(['apiToken', 'canvasUrl'], r));
+
+    // Once a Canvas address is saved, only ever run setup there (same rule as
+    // content.js). isCanvas is based on page-controlled signals any site can
+    // fake, so a look-alike page must not be able to walk the user through
+    // replacing their saved Canvas address and token. Switching schools goes
+    // through the options page instead.
+    if (stored.canvasUrl) {
+        try { if (new URL(stored.canvasUrl).hostname !== location.hostname) return; }
+        catch { return; }
+    }
 
     await new Promise(r => {
         if (document.readyState === 'complete') return r();

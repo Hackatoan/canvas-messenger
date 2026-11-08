@@ -66,6 +66,13 @@ saveBtn.addEventListener('click', async () => {
         markInvalid(urlInput);
         return;
     }
+    // Never send the API token over plaintext HTTP (local dev instances excepted).
+    const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(parsedUrl.hostname);
+    if (parsedUrl.protocol !== 'https:' && !(parsedUrl.protocol === 'http:' && isLocal)) {
+        showStatus('Canvas URL must start with https://', 'error');
+        markInvalid(urlInput);
+        return;
+    }
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Connecting…';
@@ -138,10 +145,15 @@ function send(msg) {
 
 async function acctRun(fn) {
     acctButtons.forEach(b => { b.disabled = true; });
-    acctStatus.className = 'status inline';
+    // Sign-in/Google/sync can take a few seconds; say something is happening.
+    const busy = 'Working…';
+    acctMsg(busy, 'info');
     try { return await fn(); }
     catch (e) { acctMsg(e.message, 'error'); }
-    finally { acctButtons.forEach(b => { b.disabled = false; }); }
+    finally {
+        acctButtons.forEach(b => { b.disabled = false; });
+        if (acctStatus.textContent === busy) acctStatus.className = 'status inline'; // e.g. confirm() cancelled
+    }
 }
 
 async function refreshAccount() {

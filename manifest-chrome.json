@@ -25,7 +25,6 @@
         "http://*/*"
       ],
       "js": [
-        "styles/messenger.js",
         "content.js"
       ],
       "run_at": "document_end"
@@ -47,9 +46,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "styles/messenger.css",
-        "call.html",
-        "call.js"
+        "styles/messenger.css"
       ],
       "matches": [
         "<all_urls>"
