@@ -415,8 +415,19 @@
 
     // ── Load messenger CSS into shadow, init app ──────────────────────────
     try {
-        const cssResp = await fetch(chrome.runtime.getURL('styles/messenger.css'));
+        // styles/messenger.js (~90 KB) is no longer a manifest content script
+        // — that parsed it on every website. Ask the background to inject it
+        // into this tab's isolated world only now that we're mounting, in
+        // parallel with the CSS fetch.
+        const uiReady = window.CanvasMessenger ? Promise.resolve() : new Promise((resolve, reject) =>
+            chrome.runtime.sendMessage({ action: 'injectMessengerUI' }, res => {
+                if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+                if (res?.error) return reject(new Error(res.error));
+                resolve();
+            }));
+        const [cssResp] = await Promise.all([fetch(chrome.runtime.getURL('styles/messenger.css')), uiReady]);
         if (!cssResp.ok) throw new Error(`CSS fetch ${cssResp.status}`);
+        if (!window.CanvasMessenger) throw new Error('Messenger UI script did not load');
         const shadowStyle = document.createElement('style');
         shadowStyle.textContent = await cssResp.text();
         shadow.replaceChild(shadowStyle, loadingEl);

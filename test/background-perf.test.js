@@ -19,6 +19,7 @@ function load({ routes = [], tabs = [] } = {}) {
     const badge = [];
     const tabQueries = [];
     const tabMessages = [];
+    const injections = [];
     const chrome = deepStub();
     chrome.storage = { local: {
         get: (keys, cb) => {
@@ -35,6 +36,7 @@ function load({ routes = [], tabs = [] } = {}) {
         query: async (q) => { tabQueries.push(q); return tabs; },
         sendMessage: async (id, m) => { tabMessages.push({ id, m }); },
     };
+    chrome.scripting = { executeScript: async (o) => { injections.push(o); return []; } };
     chrome.action = { setBadgeText: o => badge.push(o.text), setBadgeBackgroundColor: noop, onClicked: { addListener: noop } };
     class WS { constructor() { this.readyState = 0; } close() {} send() {} }
     WS.OPEN = 1; WS.CONNECTING = 0;
@@ -53,7 +55,7 @@ function load({ routes = [], tabs = [] } = {}) {
     const api = new Function('chrome', 'WebSocket', 'fetch', 'crypto', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
         src + '\nreturn { handleMessage, updateBadge, broadcastToTabs, storeRelayMessage, relayEncrypt };')
         (chrome, WS, fetchFake, globalThis.crypto, inert, inert, inert, inert);
-    return { api, store, calls, storageOps, badge, tabQueries, tabMessages };
+    return { api, store, calls, storageOps, badge, tabQueries, tabMessages, injections };
 }
 
 const unreadRoute = ['/conversations?scope=unread', () => ({ status: 200, body: [{ id: 1 }, { id: 2 }] })];
@@ -162,4 +164,19 @@ test('findOrCreateClassChat caches the topic id per host+course; fresh bypasses 
     assert.equal((await env.api.handleMessage({ action: 'findOrCreateClassChat', courseId: 9, fresh: true })).id, 43);
     assert.equal(listCalls(), 2);
     assert.equal(env.store.cmClassChatTopics['https://school.instructure.com|9'], 43);
+
+test('injectMessengerUI loads only the sidebar UI file into the requesting tab/frame', async () => {
+    const env = load();
+    assert.deepEqual(await env.api.handleMessage({ action: 'injectMessengerUI' }, { tab: { id: 7 }, frameId: 0 }), { ok: true });
+    assert.deepEqual(env.injections, [{ target: { tabId: 7, frameIds: [0] }, files: ['styles/messenger.js'] }]);
+    await assert.rejects(env.api.handleMessage({ action: 'injectMessengerUI' }, {}), /No sender tab/);
+});
+
+test('manifests no longer inject the sidebar UI into every page', () => {
+    for (const f of ['manifest.json', 'manifest-chrome.json']) {
+        const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
+        const js = m.content_scripts.flatMap(c => c.js);
+        assert.ok(js.includes('content.js'), f);
+        assert.ok(!js.includes('styles/messenger.js'), f);
+    }
 });

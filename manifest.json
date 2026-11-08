@@ -26,7 +26,6 @@
         "http://*/*"
       ],
       "js": [
-        "styles/messenger.js",
         "content.js"
       ],
       "run_at": "document_end"
