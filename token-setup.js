@@ -15,9 +15,10 @@ function redact(str) {
 }
 
 (async () => {
-    const stored = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
-
     // ── Detect Canvas ─────────────────────────────────────────────────────
+    // This script is injected into every http(s) page, so run the cheap
+    // synchronous check before touching chrome.storage (an async IPC to the
+    // browser process) — non-Canvas pages now exit without any round trip.
     const env = window.ENV || {};
     const isCanvas = !!(
         env.DOMAIN_ROOT_ACCOUNT_ID !== undefined ||
@@ -27,6 +28,8 @@ function redact(str) {
         document.querySelector('#application[data-account-id]')
     );
     if (!isCanvas) return;
+
+    const stored = await new Promise(r => chrome.storage.local.get(['apiToken'], r));
 
     await new Promise(r => {
         if (document.readyState === 'complete') return r();
