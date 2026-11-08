@@ -137,7 +137,9 @@
     const fab = document.createElement('button');
     fab.id    = 'cm-fab';
     fab.title = 'Canvas Messenger (drag to move, right-click for options)';
-    fab.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+    fab.setAttribute('aria-label', 'Canvas Messenger');
+    fab.setAttribute('aria-expanded', 'false');
+    fab.innerHTML = `<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
     document.body.appendChild(fab);
@@ -171,6 +173,7 @@
         document.body.classList.add('cm-panel-open');
         fab.classList.add('cm-open');
         fab.title = 'Close Canvas Messenger';
+        fab.setAttribute('aria-expanded', 'true');
         applyFabPos();
         updateNavBtn();
     }
@@ -180,6 +183,7 @@
         document.body.classList.remove('cm-panel-open');
         fab.classList.remove('cm-open');
         fab.title = 'Canvas Messenger (drag to move, right-click for options)';
+        fab.setAttribute('aria-expanded', 'false');
         applyFabPos();
         updateNavBtn();
     }
@@ -233,6 +237,12 @@
         }
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup',   onUp);
+    });
+
+    // Mouse toggling happens on mouseup (to tell clicks from drags); keyboard
+    // Enter/Space only fire 'click' (detail === 0), so handle those here.
+    fab.addEventListener('click', e => {
+        if (e.detail === 0) togglePanel();
     });
 
     fab.addEventListener('contextmenu', e => {
@@ -347,7 +357,7 @@
         li.id = 'cm-nav-li';
         li.className = 'ic-app-header__menu-list-item';
         li.innerHTML = `
-            <a id="cm-nav-btn" href="javascript:void(0)" role="button" tabindex="0"
+            <a id="cm-nav-btn" href="javascript:void(0)" role="button" tabindex="0" aria-expanded="false"
                class="ic-app-header__menu-list-link"
                style="display:flex;flex-direction:column;align-items:center;justify-content:center;
                       gap:3px;cursor:pointer;padding:14px 2px;color:inherit;text-decoration:none;">
@@ -369,6 +379,9 @@
             e.preventDefault();
             togglePanel();
         });
+        li.querySelector('#cm-nav-btn').addEventListener('keydown', e => {
+            if (e.key === ' ') { e.preventDefault(); togglePanel(); } // role=button: Space activates too
+        });
         li.querySelector('#cm-nav-btn').addEventListener('contextmenu', e => {
             e.preventDefault();
             showContextMenu(e.clientX, e.clientY, true);
@@ -382,6 +395,7 @@
         const btn = document.getElementById('cm-nav-btn');
         if (!btn) return;
         btn.style.color = isOpen ? '#5865f2' : '';
+        btn.setAttribute('aria-expanded', String(isOpen));
     }
 
     // Inject nav button if mode was saved
@@ -480,6 +494,7 @@
 
         const toast = document.createElement('div');
         toast.id = 'cm-call-toast';
+        toast.setAttribute('role', 'alert'); // incoming call / failed call must reach screen readers
         Object.assign(toast.style, {
             position: 'fixed', bottom: '80px', right: '24px',
             background: '#2b2d31', border: '1px solid #404249',
@@ -559,7 +574,10 @@
                 fab.appendChild(badge);
             }
             badge.textContent = count > 99 ? '99+' : String(count);
+            badge.setAttribute('aria-hidden', 'true');
         } else { badge?.remove(); }
+        // The badge digits would otherwise become the button's whole accessible name.
+        fab.setAttribute('aria-label', count > 0 ? `Canvas Messenger, ${count} unread` : 'Canvas Messenger');
 
         // Nav button badge
         const navBadge = document.getElementById('cm-nav-badge');
