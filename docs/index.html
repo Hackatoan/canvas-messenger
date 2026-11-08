@@ -101,7 +101,7 @@
     <h1>Chat with your classmates,<br><span class="grad">right inside Canvas.</span></h1>
     <p class="tag">Canvas Messenger adds Discord-style direct messages, group chats, and class-wide channels to Canvas LMS — no separate app, no accounts to juggle.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest">⭳ Download latest</a>
+      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest"><span aria-hidden="true">⭳</span> Download latest</a>
       <a class="btn ghost" href="#setup">How it works</a>
       <a class="btn ghost" href="https://github.com/Hackatoan/canvas-messenger">View source</a>
     </div>
@@ -109,17 +109,19 @@
   </div>
 </header>
 
+<main>
+
 <section>
   <div class="wrap">
     <h2>Messaging that lives where you study</h2>
     <p class="sub">Everything happens on top of the Canvas pages you already use.</p>
     <div class="grid">
-      <div class="card"><div class="ic">💬</div><h3>Direct messages</h3><p>Message any classmate one-on-one, in real time, without leaving Canvas.</p></div>
-      <div class="card"><div class="ic">👥</div><h3>Group chats</h3><p>Spin up group threads for projects, study sessions, or friends.</p></div>
-      <div class="card"><div class="ic">🏫</div><h3>Class channels</h3><p>A shared channel for everyone in a course — announcements, questions, and banter.</p></div>
-      <div class="card"><div class="ic">⚡</div><h3>Real-time</h3><p>Messages arrive instantly over WebRTC peer connections — fast and lightweight.</p></div>
-      <div class="card"><div class="ic">🧩</div><h3>Chrome &amp; Firefox</h3><p>One codebase, both browsers. Loads as a standard extension.</p></div>
-      <div class="card"><div class="ic">🔓</div><h3>Fully self-hostable</h3><p>The extension and both backend services are open source — run the whole stack yourself.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">💬</div><h3>Direct messages</h3><p>Message any classmate one-on-one, in real time, without leaving Canvas.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">👥</div><h3>Group chats</h3><p>Spin up group threads for projects, study sessions, or friends.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🏫</div><h3>Class channels</h3><p>A shared channel for everyone in a course — announcements, questions, and banter.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">⚡</div><h3>Real-time</h3><p>Messages arrive instantly over WebRTC peer connections — fast and lightweight.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🧩</div><h3>Chrome &amp; Firefox</h3><p>One codebase, both browsers. Loads as a standard extension.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🔓</div><h3>Fully self-hostable</h3><p>The extension and both backend services are open source — run the whole stack yourself.</p></div>
     </div>
   </div>
 </section>
@@ -141,9 +143,9 @@
     <h2>Open source &amp; self-hostable</h2>
     <p class="sub">Three repositories make up the whole system — all public.</p>
     <div class="grid">
-      <div class="card"><div class="ic">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>The Chrome/Firefox extension — the UI injected into Canvas.</p></div>
-      <div class="card"><div class="ic">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>REST API for registration, auth tokens, invites, and message relay.</p></div>
-      <div class="card"><div class="ic">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>WebRTC signaling server that brokers peer connections.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>The Chrome/Firefox extension — the UI injected into Canvas.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>REST API for registration, auth tokens, invites, and message relay.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>WebRTC signaling server that brokers peer connections.</p></div>
     </div>
   </div>
 </section>
@@ -159,6 +161,8 @@
     <details><summary>Where's my data?</summary><p>Messages travel peer-to-peer over WebRTC where possible; the relay handles registration, invites, and delivery. Self-host the backend to keep everything on infrastructure you control.</p></details>
   </div>
 </section>
+
+</main>
 
 <footer>
   <div class="foot-links">

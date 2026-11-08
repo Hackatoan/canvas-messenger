@@ -101,7 +101,7 @@
     <h1>Chatte mit deinen Kommilitonen,<br><span class="grad">direkt in Canvas.</span></h1>
     <p class="tag">Canvas Messenger fügt dem Canvas LMS Direktnachrichten, Gruppenchats und kursweite Kanäle im Discord-Stil hinzu – ganz ohne separate App oder zusätzliche Konten.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest">⭳ Neueste Version herunterladen</a>
+      <a class="btn primary" href="https://github.com/Hackatoan/canvas-messenger/releases/latest"><span aria-hidden="true">⭳</span> Neueste Version herunterladen</a>
       <a class="btn ghost" href="#setup">So funktioniert's</a>
       <a class="btn ghost" href="https://github.com/Hackatoan/canvas-messenger">Quellcode ansehen</a>
     </div>
@@ -109,17 +109,19 @@
   </div>
 </header>
 
+<main>
+
 <section>
   <div class="wrap">
     <h2>Messaging dort, wo du lernst</h2>
     <p class="sub">Alles läuft direkt auf den Canvas-Seiten, die du bereits nutzt.</p>
     <div class="grid">
-      <div class="card"><div class="ic">💬</div><h3>Direktnachrichten</h3><p>Schreibe jedem Kommilitonen privat und in Echtzeit, ohne Canvas zu verlassen.</p></div>
-      <div class="card"><div class="ic">👥</div><h3>Gruppenchats</h3><p>Erstelle Gruppnerthreads für Projekte, Lernsitzungen oder Freunde.</p></div>
-      <div class="card"><div class="ic">🏫</div><h3>Kurs-Kanäle</h3><p>Ein gemeinsamer Kanal für alle in einem Kurs – für Ankündigungen, Fragen und den Plausch zwischendurch.</p></div>
-      <div class="card"><div class="ic">⚡</div><h3>Echtzeit</h3><p>Nachrichten kommen dank WebRTC-Peer-Verbindungen sofort an – schnell und leichtgewichtigt.</p></div>
-      <div class="card"><div class="ic">🧩</div><h3>Chrome &amp; Firefox</h3><p>Eine Codebasis, beide Browser. Lädt sich als Standarderweiterung.</p></div>
-      <div class="card"><div class="ic">🔓</div><h3>Vollständig selbst hostbar</h3><p>Die Erweiterung und beide Backend-Dienste sind Open Source – betreibe den gesamten Stack einfach selbst.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">💬</div><h3>Direktnachrichten</h3><p>Schreibe jedem Kommilitonen privat und in Echtzeit, ohne Canvas zu verlassen.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">👥</div><h3>Gruppenchats</h3><p>Erstelle Gruppnerthreads für Projekte, Lernsitzungen oder Freunde.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🏫</div><h3>Kurs-Kanäle</h3><p>Ein gemeinsamer Kanal für alle in einem Kurs – für Ankündigungen, Fragen und den Plausch zwischendurch.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">⚡</div><h3>Echtzeit</h3><p>Nachrichten kommen dank WebRTC-Peer-Verbindungen sofort an – schnell und leichtgewichtigt.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🧩</div><h3>Chrome &amp; Firefox</h3><p>Eine Codebasis, beide Browser. Lädt sich als Standarderweiterung.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🔓</div><h3>Vollständig selbst hostbar</h3><p>Die Erweiterung und beide Backend-Dienste sind Open Source – betreibe den gesamten Stack einfach selbst.</p></div>
     </div>
   </div>
 </section>
@@ -141,9 +143,9 @@
     <h2>Open Source &amp; selbst hostbar</h2>
     <p class="sub">Drei Repositories bilden das gesamte System – alle öffentlich.</p>
     <div class="grid">
-      <div class="card"><div class="ic">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>Die Chrome/Firefox-Erweiterung – die in Canvas injizierte Benutzeroberfläche.</p></div>
-      <div class="card"><div class="ic">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>REST-API für Registrierung, Auth-Token, Einladungen und Nachrichten-Weiterleitung.</p></div>
-      <div class="card"><div class="ic">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>WebRTC-Signalisierungsserver, der Peer-Verbindungen vermittelt.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🧩</div><h3><a href="https://github.com/Hackatoan/canvas-messenger">canvas-messenger</a></h3><p>Die Chrome/Firefox-Erweiterung – die in Canvas injizierte Benutzeroberfläche.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">📡</div><h3><a href="https://github.com/Hackatoan/cm-relay">cm-relay</a></h3><p>REST-API für Registrierung, Auth-Token, Einladungen und Nachrichten-Weiterleitung.</p></div>
+      <div class="card"><div class="ic" aria-hidden="true">🔗</div><h3><a href="https://github.com/Hackatoan/cm-signaling">cm-signaling</a></h3><p>WebRTC-Signalisierungsserver, der Peer-Verbindungen vermittelt.</p></div>
     </div>
   </div>
 </section>
@@ -159,6 +161,8 @@
     <details><summary>Wo sind meine Daten?</summary><p>Nachrichten werden nach Möglichkeit Peer-to-Peer über WebRTC übertragen; das Relay kümmert sich um Registrierung, Einladungen und Zustellung. Hoste das Backend selbst, um alles auf einer Infrastruktur zu behalten, die du kontrollierst.</p></details>
   </div>
 </section>
+
+</main>
 
 <footer>
   <div class="foot-links">
