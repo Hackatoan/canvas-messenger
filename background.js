@@ -593,8 +593,11 @@ async function syncRelayMessages() {
 async function updateBadge() {
     let count = 0;
     try {
-        const conversations = await getConversations('unread');
-        count = Array.isArray(conversations) ? conversations.length : 0;
+        // Canvas's dedicated counter returns {"unread_count":"N"} — far
+        // lighter than pulling 50 full conversation objects every minute
+        // just to take .length (and not capped at 50 either).
+        const { unread_count } = await canvasFetch('/conversations/unread_count');
+        count = Math.max(0, parseInt(unread_count, 10) || 0);
         chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
         chrome.action.setBadgeBackgroundColor({ color: '#5865F2' });
     } catch {

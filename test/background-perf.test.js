@@ -56,7 +56,7 @@ function load({ routes = [], tabs = [] } = {}) {
     return { api, store, calls, storageOps, badge, tabQueries, tabMessages };
 }
 
-const unreadRoute = ['/conversations?scope=unread', () => ({ status: 200, body: [{ id: 1 }, { id: 2 }] })];
+const unreadRoute = ['/conversations/unread_count', () => ({ status: 200, body: { unread_count: '2' } })];
 
 test('updateBadge publishes the unread count for content scripts, writing only on change', async () => {
     const env = load({ routes: [unreadRoute] });
@@ -65,7 +65,8 @@ test('updateBadge publishes the unread count for content scripts, writing only o
     env.calls.length = 0; env.badge.length = 0;
 
     await env.api.handleMessage({ action: 'updateBadge' });
-    assert.equal(env.calls.filter(c => c.url.includes('scope=unread')).length, 1);
+    assert.equal(env.calls.filter(c => c.url.includes('/conversations/unread_count')).length, 1);
+    assert.equal(env.calls.filter(c => c.url.includes('scope=unread')).length, 0, 'no full conversation list for the badge');
     assert.deepEqual(env.badge, ['2']);
     assert.equal(env.store.cmUnreadCount, 2);
 
