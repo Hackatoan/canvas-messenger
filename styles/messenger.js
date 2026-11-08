@@ -457,7 +457,7 @@ class CanvasMessenger {
                 wrap.innerHTML = `
                     <div class="cm-snippet-preview">
                         <img src="${result.dataUrl}" class="cm-snippet-thumb" alt="Screenshot" />
-                        <button class="cm-snippet-remove" id="cm-snippet-remove" title="Remove">×</button>
+                        <button class="cm-snippet-remove" id="cm-snippet-remove" title="Remove screenshot" aria-label="Remove screenshot"><span aria-hidden="true">×</span></button>
                     </div>`;
                 wrap.querySelector('#cm-snippet-remove').addEventListener('click', () => {
                     this.pendingSnippet = null;
@@ -787,7 +787,7 @@ class CanvasMessenger {
         ).join('');
 
         const prefilledRecipients = (this.recipients || []).map(r =>
-            `<div class="cm-recipient-tag" data-id="${r.id}">${escHtml(r.name)} <button data-id="${r.id}" title="Remove">×</button></div>`
+            `<div class="cm-recipient-tag" data-id="${r.id}">${escHtml(r.name)} <button data-id="${r.id}" title="Remove" aria-label="Remove ${escHtml(r.name)}"><span aria-hidden="true">×</span></button></div>`
         ).join('');
 
         this.$main.innerHTML = `
@@ -901,7 +901,7 @@ class CanvasMessenger {
             for (const r of this.recipients) {
                 const tag = document.createElement('div');
                 tag.className = 'cm-recipient-tag';
-                tag.innerHTML = `${escHtml(r.name)} <button data-id="${r.id}" title="Remove">×</button>`;
+                tag.innerHTML = `${escHtml(r.name)} <button data-id="${r.id}" title="Remove" aria-label="Remove ${escHtml(r.name)}"><span aria-hidden="true">×</span></button>`;
                 tag.querySelector('button').addEventListener('click', () => {
                     this.recipients = this.recipients.filter(x => x.id !== r.id);
                     renderRecipients();
@@ -1044,8 +1044,8 @@ class CanvasMessenger {
                 ${contact.notes ? `<div class="cm-conv-preview cm-contact-notes">${escHtml(contact.notes)}</div>` : ''}
             </div>
             <div class="cm-contact-actions">
-                <button class="cm-icon-btn cm-contact-edit-btn" title="Edit">✏</button>
-                <button class="cm-icon-btn cm-contact-del-btn" title="Delete">✕</button>
+                <button class="cm-icon-btn cm-contact-edit-btn" title="Edit" aria-label="Edit ${escHtml(contact.name)}"><span aria-hidden="true">✏</span></button>
+                <button class="cm-icon-btn cm-contact-del-btn" title="Delete" aria-label="Delete ${escHtml(contact.name)}"><span aria-hidden="true">✕</span></button>
             </div>`;
 
         el.querySelector('.cm-contact-avatar-slot').replaceWith(mkAvatar(contact.name));
@@ -1473,7 +1473,7 @@ class CanvasMessenger {
             <div class="cm-input-area">
                 <div class="cm-input-box">
                     <textarea id="cm-relay-input" placeholder="Message ${escHtml(contact.name)}… (encrypted)" aria-label="Message ${escHtml(contact.name)} (encrypted)" rows="1"></textarea>
-                    <button class="cm-send-btn" id="cm-relay-send">
+                    <button class="cm-send-btn" id="cm-relay-send" title="Send" aria-label="Send">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
                 </div>
@@ -1623,7 +1623,7 @@ class CanvasMessenger {
         this.$main.innerHTML = `
             <div class="cm-compose">
                 <div class="cm-compose-header">
-                    <button class="cm-icon-btn" id="cm-relay-search-back">
+                    <button class="cm-icon-btn" id="cm-relay-search-back" title="Back" aria-label="Back">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7-7-7 7 7 7"/></svg>
                     </button>
                     <h2>Find or Add Contact</h2>
