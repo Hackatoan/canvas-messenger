@@ -13,28 +13,33 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Build
         run: ./build.sh
 
       - name: Install web-ext
-        run: npm install -g web-ext
+        run: npm install -g web-ext@10.8.0
 
       - name: Sign Firefox extension
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
         run: |
           web-ext sign \
             --source-dir=dist/firefox \
             --channel=unlisted \
-            --api-key="${{ secrets.AMO_API_KEY }}" \
-            --api-secret="${{ secrets.AMO_API_SECRET }}" \
+            --api-key="$AMO_API_KEY" \
+            --api-secret="$AMO_API_SECRET" \
             --artifacts-dir=dist/signed
           echo "XPI=$(ls dist/signed/*.xpi)" >> $GITHUB_ENV
 
       - name: Submit to AMO (listed)
         continue-on-error: true
         run: |
-          pip install PyJWT requests --quiet
+          pip install 'PyJWT==2.15.1' 'requests==2.34.2' --quiet
           python3 .github/scripts/submit-amo.py
         env:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
