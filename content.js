@@ -75,11 +75,14 @@
             width: ${w}px; height: 100vh;
             z-index: 99999;
             transform: translateX(100%);
-            transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+            /* visibility keeps the off-screen panel out of the Tab order while
+               closed; it flips only after the slide-out finishes. */
+            visibility: hidden;
+            transition: transform 0.28s cubic-bezier(0.4,0,0.2,1), visibility 0s linear 0.28s;
             box-shadow: -6px 0 40px rgba(0,0,0,0.45);
             background: #313338;
         }
-        #cm-host.cm-open { transform: translateX(0); }
+        #cm-host.cm-open { transform: translateX(0); visibility: visible; transition-delay: 0s; }
 
         body { transition: margin-right 0.28s cubic-bezier(0.4,0,0.2,1); }
         body.cm-panel-open { margin-right: ${w}px !important; }
@@ -168,8 +171,15 @@
         if (isOpen) document.body.style.marginRight = w + 'px';
     }
 
+    // The launcher (FAB or nav-bar button) if it currently has keyboard focus.
+    function keyboardLauncher() {
+        const a = document.activeElement;
+        return (a === fab || a?.id === 'cm-nav-btn') && a.matches(':focus-visible') ? a : null;
+    }
+
     function openPanel() {
-        ensureApp();
+        const viaKeyboard = !!keyboardLauncher();
+        const appReady = ensureApp();
         isOpen = true;
         host.classList.add('cm-open');
         document.body.classList.add('cm-panel-open');
@@ -178,8 +188,16 @@
         fab.setAttribute('aria-expanded', 'true');
         applyFabPos();
         updateNavBtn();
+        // Keyboard users land inside the panel (selected tab) instead of
+        // having to Tab through the rest of the Canvas page to reach it.
+        // The UI is built lazily on first open (ensureApp), so wait for it before
+        // moving focus; skip if the panel was closed again in the meantime.
+        if (viaKeyboard) Promise.resolve(appReady).then(() => {
+            if (isOpen) (shadow.querySelector('.cm-tab[aria-selected="true"]') || shadow.querySelector('button'))?.focus();
+        }, () => {});
     }
     function closePanel() {
+        const focusWasInPanel = !!shadow.activeElement;
         isOpen = false;
         host.classList.remove('cm-open');
         document.body.classList.remove('cm-panel-open');
@@ -188,6 +206,9 @@
         fab.setAttribute('aria-expanded', 'false');
         applyFabPos();
         updateNavBtn();
+        // Closing (e.g. Escape) while focus is inside the now-hidden panel
+        // would strand it; hand it back to whichever launcher is visible.
+        if (focusWasInPanel) (navbarMode ? document.getElementById('cm-nav-btn') : fab)?.focus();
     }
     function togglePanel() { isOpen ? closePanel() : openPanel(); }
 
