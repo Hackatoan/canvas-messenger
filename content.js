@@ -516,8 +516,12 @@
             const convs = await new Promise(r =>
                 chrome.runtime.sendMessage({ action: 'getConversations', scope: 'unread' }, r)
             );
-            const count = Array.isArray(convs) ? convs.length : 0;
-            chrome.runtime.sendMessage({ action: 'updateBadge' });
+            lastBadgeAt = Date.now();
+            const ok    = Array.isArray(convs);
+            const count = ok ? convs.length : 0;
+            // Hand the count over so the background doesn't re-fetch the
+            // identical unread list (it still fetches itself if ours failed).
+            chrome.runtime.sendMessage(ok ? { action: 'updateBadge', count } : { action: 'updateBadge' });
 
             // FAB badge
             let badge = fab.querySelector('.cm-fab-badge');
@@ -543,7 +547,14 @@
         } catch {}
     }
 
+    // Each open Canvas tab polls the unread list; background tabs skip it
+    // (their badge isn't visible) and catch up when shown again.
+    const BADGE_POLL_MS = 60000;
+    let lastBadgeAt = 0;
     updateBadge();
-    setInterval(updateBadge, 60000);
+    setInterval(() => { if (!document.hidden) updateBadge(); }, BADGE_POLL_MS);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && Date.now() - lastBadgeAt >= BADGE_POLL_MS) updateBadge();
+    });
 })();
 
