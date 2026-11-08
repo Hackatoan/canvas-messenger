@@ -74,7 +74,6 @@ body {
     border: 2px solid rgba(255,255,255,0.15);
     background: #2b2d31;
     z-index: 10;
-    cursor: pointer;
 }
 
 #local-video {
@@ -180,6 +179,8 @@ body {
 .ctrl-btn:focus-visible { outline: 2px solid rgba(255,255,255,0.5); outline-offset: 3px; }
 .ctrl-btn.off { background: rgba(255,255,255,0.12); }
 .ctrl-btn.off svg { opacity: 0.4; }
+.ctrl-btn[aria-disabled="true"] { cursor: not-allowed; opacity: 0.6; }
+.ctrl-btn[aria-disabled="true"]:hover { background: rgba(255,255,255,0.12); transform: none; }
 .ctrl-btn.screen-active { background: #5865f2; }
 .ctrl-btn.hangup-btn { background: #ed4245; width: 60px; height: 60px; }
 .ctrl-btn.hangup-btn:hover { background: #c03537; }
