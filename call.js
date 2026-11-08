@@ -88,8 +88,13 @@ function connectSignaling() {
     ws.onmessage = async (e) => {
         let msg;
         try { msg = JSON.parse(e.data); } catch { return; }
+        // This window is bound to one peer. The signaling server stamps `from`
+        // with the sender's registered id, so drop anything from anyone else —
+        // otherwise a third party could negotiate their own connection and
+        // receive this window's camera/mic, or hang the call up.
+        if (!msg || String(msg.from) !== String(peerId)) return;
 
-        if (msg.type === 'offer')       await handleOffer(msg.sdp, msg.from);
+        if (msg.type === 'offer')       await handleOffer(msg.sdp);
         if (msg.type === 'answer')      await pc?.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
         if (msg.type === 'ice' && msg.candidate) {
             try { await pc?.addIceCandidate(msg.candidate); } catch {}
@@ -142,8 +147,8 @@ async function startCall() {
     wsSend({ type: 'offer', to: peerId, sdp: pc.localDescription.sdp });
 }
 
-async function handleOffer(sdp, from) {
-    const target = from || peerId;
+async function handleOffer(sdp) {
+    const target = peerId;
     createPC();
     await pc.setRemoteDescription({ type: 'offer', sdp });
     const answer = await pc.createAnswer();
