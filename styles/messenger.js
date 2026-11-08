@@ -166,7 +166,7 @@ class CanvasMessenger {
     }
 
     async render() {
-        this.root.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading…</div>';
+        this.root.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading…</div>';
         try {
             const settings = await API.getSettings();
             if (!settings.canvasUrl || !settings.apiToken) {
@@ -227,7 +227,7 @@ class CanvasMessenger {
                         <button class="cm-tab" data-tab="connect" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Connect</button>
                     </div>
                     <div class="cm-conv-list" id="cm-conv-list" role="tabpanel">
-                        <div class="cm-loading"><div class="cm-spinner"></div></div>
+                        <div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>
                     </div>
                 </div>
                 <div class="cm-main" id="cm-main">
@@ -293,7 +293,7 @@ class CanvasMessenger {
     // ── Conversation list ──────────────────────────────────────────────────
 
     async loadConversations() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         try {
             this.conversations = await API.getConversations(this.tab);
             this.renderConvList();
@@ -356,7 +356,7 @@ class CanvasMessenger {
     // ── Conversation view ──────────────────────────────────────────────────
 
     async openConversation(id, subject, withName) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading messages…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading messages…</div>';
         try {
             const conv = await API.getConversation(id);
             this.renderConversation(conv, subject, withName);
@@ -545,7 +545,7 @@ class CanvasMessenger {
     // ── Classes tab ────────────────────────────────────────────────────────
 
     async loadClasses() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         this.stopClassChatPoll();
         try {
             const courses = await API.getCourses();
@@ -585,7 +585,7 @@ class CanvasMessenger {
 
     async openClassChat(course) {
         this.stopClassChatPoll();
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Setting up class chat…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Setting up class chat…</div>';
         try {
             let topic = await API.findOrCreateClassChat(course.id);
             this.classChatTopic = topic;
@@ -761,7 +761,7 @@ class CanvasMessenger {
     // ── Groups tab ─────────────────────────────────────────────────────────
 
     async loadGroups() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         try {
             const groups = await API.getGroups();
             if (!groups.length) {
@@ -800,7 +800,7 @@ class CanvasMessenger {
     }
 
     async openGroupView(group) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading members…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading members…</div>';
         try {
             const members = await API.getGroupUsers(group.id);
             const others = members.filter(m => m.id !== (this.currentUser && this.currentUser.id));
@@ -864,7 +864,7 @@ class CanvasMessenger {
             this.renderComposeForm();
             return;
         }
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading courses…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading courses…</div>';
         try {
             this.courses = await API.getCourses();
         } catch {
@@ -1206,7 +1206,7 @@ class CanvasMessenger {
     }
 
     async dmContact(contact) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Looking up on Canvas…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Looking up on Canvas…</div>';
         this.recipients = [];
 
         const trySearch = async (term) => {
@@ -1312,7 +1312,7 @@ class CanvasMessenger {
     // ── Cross-campus relay (Connect tab) ───────────────────────────────────
 
     async loadRelayTab() {
-        this.$convList.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        this.$convList.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
         this._removeRelayListener();
 
         const profile = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetProfile' }, r));
@@ -1478,7 +1478,7 @@ class CanvasMessenger {
             resultsEl.id = 'cm-relay-search-hits';
             this.$convList.appendChild(resultsEl);
         }
-        resultsEl.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div></div>';
+        resultsEl.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div><span class="cm-sr-only">Loading…</span></div>';
 
         const matches = [];
         for (const t of threads) {
@@ -1524,7 +1524,7 @@ class CanvasMessenger {
     }
 
     async openRelayThread(thread, profile) {
-        this.$main.innerHTML = '<div class="cm-loading"><div class="cm-spinner"></div> Loading…</div>';
+        this.$main.innerHTML = '<div class="cm-loading" role="status"><div class="cm-spinner"></div> Loading…</div>';
         this._removeRelayListener();
         try {
             const messages  = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetMessages', threadId: thread.id }, r)) || [];
