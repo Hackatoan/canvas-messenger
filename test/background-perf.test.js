@@ -164,6 +164,7 @@ test('findOrCreateClassChat caches the topic id per host+course; fresh bypasses 
     assert.equal((await env.api.handleMessage({ action: 'findOrCreateClassChat', courseId: 9, fresh: true })).id, 43);
     assert.equal(listCalls(), 2);
     assert.equal(env.store.cmClassChatTopics['https://school.instructure.com|9'], 43);
+});
 
 test('injectMessengerUI loads only the sidebar UI file into the requesting tab/frame', async () => {
     const env = load();
