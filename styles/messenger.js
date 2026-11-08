@@ -67,6 +67,25 @@ function fullTime(iso) {
     return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Make a click-to-copy text element keyboard-operable (Enter/Space) and
+// confirm the copy with a brief "Copied!" that screen readers also announce.
+function makeCopyable(el, text) {
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.title = 'Copy to clipboard';
+    el.setAttribute('aria-live', 'polite');
+    const copy = async () => {
+        await navigator.clipboard?.writeText(text).catch(() => {});
+        el.textContent = 'Copied!';
+        clearTimeout(el._copyTimer);
+        el._copyTimer = setTimeout(() => { el.textContent = text; }, 1500);
+    };
+    el.addEventListener('click', copy);
+    el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copy(); }
+    });
+}
+
 function escHtml(str) {
     return String(str || '')
         .replace(/&/g, '&amp;')
@@ -1342,9 +1361,7 @@ class CanvasMessenger {
         const myIdEl = document.createElement('div');
         myIdEl.className = 'cm-relay-myid';
         myIdEl.innerHTML = `<span style="color:#87898c;font-size:10px">Your ID: </span><span class="cm-relay-id-text">${escHtml(profile.id)}</span>`;
-        myIdEl.querySelector('.cm-relay-id-text').addEventListener('click', () => {
-            navigator.clipboard?.writeText(profile.id).catch(() => {});
-        });
+        makeCopyable(myIdEl.querySelector('.cm-relay-id-text'), profile.id);
         this.$convList.appendChild(myIdEl);
 
         const listWrap = document.createElement('div');
@@ -1695,9 +1712,7 @@ class CanvasMessenger {
             </div>`;
 
         this.$main.querySelector('#cm-relay-search-back').addEventListener('click', () => this.loadRelayTab());
-        this.$main.querySelector('#cm-relay-copy-id').addEventListener('click', () => {
-            navigator.clipboard?.writeText(profile.id).catch(() => {});
-        });
+        makeCopyable(this.$main.querySelector('#cm-relay-copy-id'), profile.id);
 
         let searchResultsData = {};
         const searchInput   = this.$main.querySelector('#cm-relay-search-q');

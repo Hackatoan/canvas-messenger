@@ -732,6 +732,8 @@
     word-break: break-all; cursor: pointer;
 }
 .cm-relay-myid-value:hover { color: #5865f2; }
+.cm-relay-myid-value:focus-visible,
+.cm-relay-id-text:focus-visible { outline: 2px solid #5865f2; outline-offset: 2px; border-radius: 2px; }
 
 .cm-relay-subtitle { color: #57f287 !important; font-size: 11px !important; }
 .cm-relay-lock { font-size: 10px; opacity: 0.6; margin-left: 2px; }
