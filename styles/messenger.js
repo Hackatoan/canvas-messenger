@@ -600,6 +600,22 @@ class CanvasMessenger {
         const existingMsgs = this.$main.querySelector('#cm-class-messages');
         const wasAtBottom = !existingMsgs || (existingMsgs.scrollHeight - existingMsgs.scrollTop - existingMsgs.clientHeight < 60);
 
+        const listHtml = entries.length === 0
+            ? '<div class="cm-empty" style="margin-top:40px">No messages yet — say hello! 👋</div>'
+            : messagesHtml;
+
+        // Poll refresh: the header and input never change, so don't rebuild
+        // them (and re-bind listeners) every 20s — only swap the message
+        // list, and skip the DOM entirely when nothing new arrived.
+        if (existingMsgs && !scrollToBottom) {
+            if (listHtml === this._classChatListHtml) return;
+            this._classChatListHtml = listHtml;
+            existingMsgs.innerHTML = listHtml;
+            if (wasAtBottom) existingMsgs.scrollTop = existingMsgs.scrollHeight;
+            return;
+        }
+        this._classChatListHtml = listHtml;
+
         this.$main.innerHTML = `
             <div class="cm-main-header">
                 <div class="cm-class-channel-icon">📣</div>
@@ -609,11 +625,7 @@ class CanvasMessenger {
                 </div>
                 <div class="cm-class-live-dot" title="Live — updates every 20s"></div>
             </div>
-            <div class="cm-messages" id="cm-class-messages">
-                ${entries.length === 0
-                    ? '<div class="cm-empty" style="margin-top:40px">No messages yet — say hello! 👋</div>'
-                    : messagesHtml}
-            </div>
+            <div class="cm-messages" id="cm-class-messages">${listHtml}</div>
             <div class="cm-input-area">
                 <div class="cm-input-box">
                     <textarea id="cm-class-input" placeholder="Message ${escHtml(course.course_code || course.name)}…" aria-label="Message ${escHtml(course.course_code || course.name)}" rows="1"></textarea>
@@ -679,6 +691,11 @@ class CanvasMessenger {
         if (!this.classChatTopic || !this.classChatCourse) return;
         // Only refresh if the class chat view is still shown
         if (!this.$main.querySelector('#cm-class-messages')) return;
+        // ...and someone can actually see it: skip the Canvas API call while
+        // the tab is in the background or the sidebar panel is slid shut.
+        if (document.hidden) return;
+        const panelHost = this.root.getRootNode().host;
+        if (panelHost && !panelHost.classList.contains('cm-open')) return;
         await this.renderClassChat(this.classChatCourse, this.classChatTopic, false);
     }
 
