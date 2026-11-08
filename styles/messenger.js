@@ -51,20 +51,31 @@ function avatarColor(name = '') {
     return colors[Math.abs(h) % colors.length];
 }
 
+// Date#toLocale*String(locale, options) builds a fresh Intl.DateTimeFormat on
+// every call (~0.07 ms each in Chrome) — a 1000-message relay thread spent
+// ~65 ms of main thread just on timestamps. Same locale/options, built once.
+const DATE_FMT = {};
+function dateFmt(name, opts, d) {
+    // format() throws on an invalid Date where toLocale*String returned
+    // "Invalid Date" — keep the old output for missing/bad timestamps.
+    if (isNaN(d)) return 'Invalid Date';
+    return (DATE_FMT[name] || (DATE_FMT[name] = new Intl.DateTimeFormat([], opts))).format(d);
+}
+
 function relativeTime(iso) {
     const d = new Date(iso);
     const now = new Date();
     const diff = (now - d) / 1000;
     if (diff < 60) return 'Just now';
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diff < 86400 * 7) return d.toLocaleDateString([], { weekday: 'short' });
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    if (diff < 86400) return dateFmt('time', { hour: '2-digit', minute: '2-digit' }, d);
+    if (diff < 86400 * 7) return dateFmt('weekday', { weekday: 'short' }, d);
+    return dateFmt('monthDay', { month: 'short', day: 'numeric' }, d);
 }
 
 function fullTime(iso) {
     const d = new Date(iso);
-    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return dateFmt('full', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }, d);
 }
 
 // Dim an optimistic message bubble whose send failed and put a visible,
