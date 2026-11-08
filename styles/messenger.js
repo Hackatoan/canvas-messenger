@@ -32,6 +32,12 @@ const API = {
     initCall:         (peerId, peerName, fromName) => API.send('initCall', { peerId, peerName, fromName }),
 };
 
+// Live relay events (decrypted-message notifications, typing, read receipts)
+// travel content.js -> this UI over a private EventTarget. The content-script
+// world's globals aren't visible to the host page, unlike events dispatched
+// on the shared `document`, which page scripts can both observe and forge.
+const relayBus = new EventTarget();
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function initials(name = '?') {
@@ -1548,7 +1554,7 @@ class CanvasMessenger {
             // The chat is open, so tell the server these were seen right away.
             chrome.runtime.sendMessage({ action: 'relayMarkRead', threadId: thread.id });
         };
-        document.addEventListener('cm-relay-msg', this._relayListener);
+        relayBus.addEventListener('cm-relay-msg', this._relayListener);
 
         this._relayTypingListener = (e) => {
             if (e.detail.from !== contact.id) return;
@@ -1558,7 +1564,7 @@ class CanvasMessenger {
             clearTimeout(this._relayTypingHideTimer);
             this._relayTypingHideTimer = setTimeout(() => { ind.style.display = 'none'; }, 3000);
         };
-        document.addEventListener('cm-relay-typing', this._relayTypingListener);
+        relayBus.addEventListener('cm-relay-typing', this._relayTypingListener);
 
         this._relayReadListener = (e) => {
             if (e.detail.threadId !== thread.id) return;
@@ -1568,7 +1574,7 @@ class CanvasMessenger {
                 el.title = 'Read';
             });
         };
-        document.addEventListener('cm-relay-read', this._relayReadListener);
+        relayBus.addEventListener('cm-relay-read', this._relayReadListener);
 
         // Invite share button
         this.$main.querySelector('#cm-relay-invite-btn').addEventListener('click', async () => {
@@ -1587,15 +1593,15 @@ class CanvasMessenger {
 
     _removeRelayListener() {
         if (this._relayListener) {
-            document.removeEventListener('cm-relay-msg', this._relayListener);
+            relayBus.removeEventListener('cm-relay-msg', this._relayListener);
             this._relayListener = null;
         }
         if (this._relayTypingListener) {
-            document.removeEventListener('cm-relay-typing', this._relayTypingListener);
+            relayBus.removeEventListener('cm-relay-typing', this._relayTypingListener);
             this._relayTypingListener = null;
         }
         if (this._relayReadListener) {
-            document.removeEventListener('cm-relay-read', this._relayReadListener);
+            relayBus.removeEventListener('cm-relay-read', this._relayReadListener);
             this._relayReadListener = null;
         }
         clearTimeout(this._relayTypingHideTimer);
@@ -1745,5 +1751,6 @@ class CanvasMessenger {
 // Expose as a window global so content.js can reach it regardless of
 // how Firefox wraps the content-script module environment.
 window.CanvasMessenger = CanvasMessenger;
+window.cmRelayBus = relayBus;
 
 

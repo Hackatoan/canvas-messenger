@@ -185,9 +185,9 @@
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.action === 'toggleSidebar') { togglePanel(); sendResponse({ ok: true }); }
         if (msg.action === 'cm-call-event')  { showCallToast(msg.payload); sendResponse({ ok: true }); }
-        if (msg.action === 'relay-message')  { document.dispatchEvent(new CustomEvent('cm-relay-msg', { detail: msg.payload })); sendResponse({ ok: true }); }
-        if (msg.action === 'relay-typing')   { document.dispatchEvent(new CustomEvent('cm-relay-typing', { detail: msg.payload })); sendResponse({ ok: true }); }
-        if (msg.action === 'relay-read')     { document.dispatchEvent(new CustomEvent('cm-relay-read', { detail: msg.payload })); sendResponse({ ok: true }); }
+        if (msg.action === 'relay-message')  { window.cmRelayBus?.dispatchEvent(new CustomEvent('cm-relay-msg', { detail: msg.payload })); sendResponse({ ok: true }); }
+        if (msg.action === 'relay-typing')   { window.cmRelayBus?.dispatchEvent(new CustomEvent('cm-relay-typing', { detail: msg.payload })); sendResponse({ ok: true }); }
+        if (msg.action === 'relay-read')     { window.cmRelayBus?.dispatchEvent(new CustomEvent('cm-relay-read', { detail: msg.payload })); sendResponse({ ok: true }); }
     });
 
     document.addEventListener('keydown', e => {
