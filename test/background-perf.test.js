@@ -51,7 +51,7 @@ function load({ routes = [], tabs = [] } = {}) {
     const src = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
     const inert = () => 0;
     const api = new Function('chrome', 'WebSocket', 'fetch', 'crypto', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        src + '\nreturn { handleMessage, updateBadge };')
+        src + '\nreturn { handleMessage, updateBadge, broadcastToTabs };')
         (chrome, WS, fetchFake, globalThis.crypto, inert, inert, inert, inert);
     return { api, store, calls, storageOps, badge, tabQueries, tabMessages };
 }
@@ -86,4 +86,24 @@ test('updateBadge without a count still fetches the unread list itself', async (
     // Garbage counts are ignored rather than trusted.
     await env.api.handleMessage({ action: 'updateBadge', count: -1 });
     assert.equal(env.calls.filter(c => c.url.includes('scope=unread')).length, 2);
+});
+
+test('broadcastToTabs only messages tabs on the saved Canvas host', async () => {
+    const tabs = [
+        { id: 1, url: 'https://school.instructure.com/courses/1' },
+        { id: 2, url: 'https://news.example.com/' },
+        { id: 3, url: 'http://school.instructure.com/' },
+        { id: 4 }, // url not exposed — keep the old behavior and try it
+    ];
+    const env = load({ tabs });
+    env.store.canvasUrl = 'https://school.instructure.com';
+    await env.api.broadcastToTabs('relay-typing', { from: 'u2' });
+    assert.deepEqual(env.tabMessages.map(t => t.id), [1, 3, 4]);
+    assert.deepEqual(env.tabMessages[0].m, { action: 'relay-typing', payload: { from: 'u2' } });
+});
+
+test('broadcastToTabs falls back to every tab before a Canvas host is saved', async () => {
+    const env = load({ tabs: [{ id: 1, url: 'https://a.example/' }, { id: 2, url: 'https://b.example/' }] });
+    await env.api.broadcastToTabs('cm-call-event', { type: 'incoming-call' });
+    assert.deepEqual(env.tabMessages.map(t => t.id), [1, 2]);
 });
