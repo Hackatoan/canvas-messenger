@@ -119,6 +119,7 @@
 
     // declared here so applyFabPos() below can read it before toggle logic
     let isOpen = false;
+    let lastUnread = null; // last unread count rendered (see renderBadge)
 
     // ── FAB position helper ────────────────────────────────────────────────
     function applyFabPos() {
@@ -344,6 +345,7 @@
         });
         navUl.appendChild(li);
         updateNavBtn();
+        if (lastUnread !== null) renderBadge(lastUnread);
     }
 
     function updateNavBtn() {
@@ -512,50 +514,41 @@
     }
 
     // ── Unread badge ──────────────────────────────────────────────────────
-    async function updateBadge() {
-        try {
-            const convs = await new Promise(r =>
-                chrome.runtime.sendMessage({ action: 'getConversations', scope: 'unread' }, r)
-            );
-            lastBadgeAt = Date.now();
-            const ok    = Array.isArray(convs);
-            const count = ok ? convs.length : 0;
-            // Hand the count over so the background doesn't re-fetch the
-            // identical unread list (it still fetches itself if ours failed).
-            chrome.runtime.sendMessage(ok ? { action: 'updateBadge', count } : { action: 'updateBadge' });
+    // background.js polls the unread list once a minute (and right after
+    // markRead) and publishes the count as storage `cmUnreadCount`; tabs just
+    // render it instead of each hitting the Canvas API on their own timer.
+    function renderBadge(count) {
+        lastUnread = count;
 
-            // FAB badge
-            let badge = fab.querySelector('.cm-fab-badge');
-            if (count > 0) {
-                if (!badge) {
-                    badge = document.createElement('div');
-                    badge.className = 'cm-fab-badge';
-                    fab.appendChild(badge);
-                }
-                badge.textContent = count > 99 ? '99+' : String(count);
-            } else { badge?.remove(); }
-
-            // Nav button badge
-            const navBadge = document.getElementById('cm-nav-badge');
-            if (navBadge) {
-                if (count > 0) {
-                    navBadge.textContent = count > 99 ? '99+' : String(count);
-                    navBadge.style.display = 'flex';
-                } else {
-                    navBadge.style.display = 'none';
-                }
+        // FAB badge
+        let badge = fab.querySelector('.cm-fab-badge');
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'cm-fab-badge';
+                fab.appendChild(badge);
             }
-        } catch {}
+            badge.textContent = count > 99 ? '99+' : String(count);
+        } else { badge?.remove(); }
+
+        // Nav button badge
+        const navBadge = document.getElementById('cm-nav-badge');
+        if (navBadge) {
+            if (count > 0) {
+                navBadge.textContent = count > 99 ? '99+' : String(count);
+                navBadge.style.display = 'flex';
+            } else {
+                navBadge.style.display = 'none';
+            }
+        }
     }
 
-    // Each open Canvas tab polls the unread list; background tabs skip it
-    // (their badge isn't visible) and catch up when shown again.
-    const BADGE_POLL_MS = 60000;
-    let lastBadgeAt = 0;
-    updateBadge();
-    setInterval(() => { if (!document.hidden) updateBadge(); }, BADGE_POLL_MS);
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && Date.now() - lastBadgeAt >= BADGE_POLL_MS) updateBadge();
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes.cmUnreadCount) renderBadge(Number(changes.cmUnreadCount.newValue) || 0);
+    });
+    chrome.storage.local.get('cmUnreadCount', d => {
+        if (Number.isInteger(d.cmUnreadCount)) renderBadge(d.cmUnreadCount);
+        else chrome.runtime.sendMessage({ action: 'updateBadge' }); // nothing published yet
     });
 })();
 

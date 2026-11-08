@@ -58,34 +58,28 @@ function load({ routes = [], tabs = [] } = {}) {
 
 const unreadRoute = ['/conversations?scope=unread', () => ({ status: 200, body: [{ id: 1 }, { id: 2 }] })];
 
-test('updateBadge with a count from the content script skips the Canvas refetch', async () => {
+test('updateBadge publishes the unread count for content scripts, writing only on change', async () => {
     const env = load({ routes: [unreadRoute] });
     env.store.canvasUrl = 'https://school.instructure.com'; env.store.apiToken = 'T';
     await new Promise(r => setImmediate(r)); // let the load-time updateBadge() settle
     env.calls.length = 0; env.badge.length = 0;
 
-    await env.api.handleMessage({ action: 'updateBadge', count: 3 });
-    assert.equal(env.calls.length, 0);
-    assert.deepEqual(env.badge, ['3']);
-
-    await env.api.handleMessage({ action: 'updateBadge', count: 0 });
-    assert.equal(env.calls.length, 0);
-    assert.deepEqual(env.badge, ['3', '']);
-});
-
-test('updateBadge without a count still fetches the unread list itself', async () => {
-    const env = load({ routes: [unreadRoute] });
-    env.store.canvasUrl = 'https://school.instructure.com'; env.store.apiToken = 'T';
-    await new Promise(r => setImmediate(r));
-    env.calls.length = 0; env.badge.length = 0;
-
     await env.api.handleMessage({ action: 'updateBadge' });
     assert.equal(env.calls.filter(c => c.url.includes('scope=unread')).length, 1);
     assert.deepEqual(env.badge, ['2']);
+    assert.equal(env.store.cmUnreadCount, 2);
 
-    // Garbage counts are ignored rather than trusted.
-    await env.api.handleMessage({ action: 'updateBadge', count: -1 });
-    assert.equal(env.calls.filter(c => c.url.includes('scope=unread')).length, 2);
+    env.storageOps.set = 0;
+    await env.api.updateBadge();
+    assert.equal(env.storageOps.set, 0, 'unchanged count is not rewritten (no storage.onChanged churn)');
+});
+
+test('updateBadge clears the in-page count when the Canvas fetch fails', async () => {
+    const env = load({ routes: [] }); // not configured -> NOT_CONFIGURED
+    env.store.cmUnreadCount = 5;
+    await env.api.updateBadge();
+    assert.equal(env.store.cmUnreadCount, 0);
+    assert.deepEqual(env.badge, [], 'toolbar badge left untouched on error');
 });
 
 test('broadcastToTabs only messages tabs on the saved Canvas host', async () => {
@@ -119,6 +113,7 @@ test('live relay receive stores message + thread in one read-modify-write', asyn
     env.store.relayProfile = { id: 'me', authToken: 'RT', privateKeyJwk: me.priv, publicKeyJwk: me.pub };
     env.store.relayContacts = [{ id: 'p1', name: 'Pat', publicKeyJwk: peer.pub }];
     const { encryptedBody, iv } = await env.api.relayEncrypt('hi there', peer.priv, me.pub);
+    await new Promise(r => setImmediate(r)); // let load-time updateBadge() settle
     env.storageOps.get = 0; env.storageOps.set = 0;
 
     const msg = { id: 'm1', threadId: 't1', senderId: 'p1', encryptedBody, iv, sentAt: '2026-11-08T10:00:00.000Z' };
@@ -139,6 +134,7 @@ test('relaySendMessage stores the sent message + thread in one write', async () 
     env.store.relayProfile = { id: 'me', authToken: 'RT', privateKeyJwk: me.priv, publicKeyJwk: me.pub };
     env.store.relayContacts = [{ id: 'p1', name: 'Pat', publicKeyJwk: peer.pub }];
     env.store.relayThreads = [{ id: 't9', contactId: 'p1', contactName: 'Pat', lastMessage: 'old', lastAt: 'x', unreadCount: 3 }];
+    await new Promise(r => setImmediate(r)); // let load-time updateBadge() settle
     env.storageOps.get = 0; env.storageOps.set = 0;
 
     const r = await env.api.handleMessage({ action: 'relaySendMessage', recipientId: 'p1', body: 'yo' });

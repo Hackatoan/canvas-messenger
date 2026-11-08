@@ -576,23 +576,24 @@ async function syncRelayMessages() {
 
 // ── Badge / polling ───────────────────────────────────────────────────────────
 
-// `knownCount` lets a caller that already fetched the unread list (the
-// content script's own badge poll) pass its count instead of making this
-// repeat the identical Canvas API request.
-async function updateBadge(knownCount) {
+// The background is the only poller of the unread list: it sets the toolbar
+// badge and publishes the count to storage, where every Canvas tab's
+// content script picks it up via storage.onChanged (no per-tab polling).
+async function updateBadge() {
+    let count = 0;
     try {
-        let count;
-        if (Number.isInteger(knownCount) && knownCount >= 0) {
-            count = knownCount;
-        } else {
-            const conversations = await getConversations('unread');
-            count = Array.isArray(conversations) ? conversations.length : 0;
-        }
+        const conversations = await getConversations('unread');
+        count = Array.isArray(conversations) ? conversations.length : 0;
         chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
         chrome.action.setBadgeBackgroundColor({ color: '#5865F2' });
     } catch {
-        // not configured or network error
+        // not configured or network error — toolbar badge left as-is; the
+        // in-page badge clears, matching what the per-tab poll used to do
     }
+    try {
+        const { cmUnreadCount } = await storageGet('cmUnreadCount');
+        if (cmUnreadCount !== count) await storageSet({ cmUnreadCount: count });
+    } catch {}
 }
 
 chrome.alarms.create('poll', { periodInMinutes: 1 });
@@ -625,7 +626,7 @@ async function handleMessage(msg, sender = {}) {
         case 'markRead':           return markRead(msg.id);
         case 'getSettings':        return getSettings();
         case 'getCurrentUser':     return getCurrentUser();
-        case 'updateBadge':        return updateBadge(msg.count);
+        case 'updateBadge':        return updateBadge();
         case 'openSettings':       chrome.runtime.openOptionsPage(); return { ok: true };
         case 'initCall':           await signalingRequest({ type: 'call-request', to: msg.peerId, fromName: msg.fromName }); return openCallWindow(msg.peerId, msg.peerName, true);
         case 'acceptCall':         await openCallWindow(msg.peerId, msg.peerName, false); return { ok: true };
