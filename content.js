@@ -122,6 +122,7 @@
     // declared here so applyFabPos() below can read it before toggle logic
     let isOpen = false;
     let lastUnread = null; // last unread count rendered (see renderBadge)
+    let appInit = null; // ensureApp() promise — UI is built on first open
 
     // ── FAB position helper ────────────────────────────────────────────────
     function applyFabPos() {
@@ -168,6 +169,7 @@
     }
 
     function openPanel() {
+        ensureApp();
         isOpen = true;
         host.classList.add('cm-open');
         document.body.classList.add('cm-panel-open');
@@ -457,25 +459,48 @@
     handle.addEventListener('mouseenter', () => { handle.style.background = 'rgba(88,101,242,0.25)'; });
     handle.addEventListener('mouseleave', () => { handle.style.background = ''; });
 
-    // ── Load messenger CSS into shadow, init app ──────────────────────────
-    try {
-        const cssResp = await fetch(chrome.runtime.getURL('styles/messenger.css'));
-        if (!cssResp.ok) throw new Error(`CSS fetch ${cssResp.status}`);
-        const shadowStyle = document.createElement('style');
-        shadowStyle.textContent = await cssResp.text();
-        shadow.replaceChild(shadowStyle, loadingEl);
+    // ── Load messenger CSS into shadow, init app (on first open) ─────────
+    // Building the UI also fires Canvas API calls (users/self + the
+    // conversation list), and Canvas is a multi-page app — doing that on
+    // every page load wasted them whenever the panel stayed shut. Defer
+    // the whole thing until the panel is first opened; the spinner already
+    // in the shadow root covers the short wait.
+    function ensureApp() {
+        if (!appInit) appInit = initApp();
+        return appInit;
+    }
 
-        const appRoot = document.createElement('div');
-        appRoot.style.cssText = 'width:100%;height:100vh;overflow:hidden;';
-        shadow.appendChild(appRoot);
+    async function initApp() {
+        try {
+            // styles/messenger.js (~90 KB) is no longer a manifest content script
+            // — that parsed it on every website. Ask the background to inject it
+            // into this tab's isolated world only now, in parallel with the CSS
+            // fetch.
+            const uiReady = window.CanvasMessenger ? Promise.resolve() : new Promise((resolve, reject) =>
+                chrome.runtime.sendMessage({ action: 'injectMessengerUI' }, res => {
+                    if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+                    if (res?.error) return reject(new Error(res.error));
+                    resolve();
+                }));
+            const [cssResp] = await Promise.all([fetch(chrome.runtime.getURL('styles/messenger.css')), uiReady]);
+            if (!cssResp.ok) throw new Error(`CSS fetch ${cssResp.status}`);
+            if (!window.CanvasMessenger) throw new Error('Messenger UI script did not load');
+            const shadowStyle = document.createElement('style');
+            shadowStyle.textContent = await cssResp.text();
+            shadow.replaceChild(shadowStyle, loadingEl);
 
-        new window.CanvasMessenger(appRoot, { popup: false });
-    } catch (err) {
-        console.error('[Canvas Messenger] init failed:', err);
-        loadingEl.style.color = '#ed4245';
-        loadingEl.innerHTML   = `⚠ Canvas Messenger failed to load<br>
-            <small style="font-size:11px"></small>`;
-        loadingEl.querySelector('small').textContent = String(err?.message || err);
+            const appRoot = document.createElement('div');
+            appRoot.style.cssText = 'width:100%;height:100vh;overflow:hidden;';
+            shadow.appendChild(appRoot);
+
+            new window.CanvasMessenger(appRoot, { popup: false });
+        } catch (err) {
+            console.error('[Canvas Messenger] init failed:', err);
+            loadingEl.style.color = '#ed4245';
+            loadingEl.innerHTML   = `⚠ Canvas Messenger failed to load<br>
+                <small style="font-size:11px"></small>`;
+            loadingEl.querySelector('small').textContent = String(err?.message || err);
+        }
     }
 
     // ── Incoming call toast ───────────────────────────────────────────────

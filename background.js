@@ -672,6 +672,16 @@ async function handleMessage(msg, sender = {}) {
         case 'getCurrentUser':     return getCurrentUser();
         case 'updateBadge':        return updateBadge();
         case 'openSettings':       chrome.runtime.openOptionsPage(); return { ok: true };
+        case 'injectMessengerUI': {
+            // Lazy-load the sidebar UI into the content script's isolated
+            // world for the tab that asked (see content.js) — fixed file only.
+            if (!sender.tab?.id) throw new Error('No sender tab');
+            await chrome.scripting.executeScript({
+                target: { tabId: sender.tab.id, frameIds: [sender.frameId || 0] },
+                files: ['styles/messenger.js'],
+            });
+            return { ok: true };
+        }
         case 'initCall':           await signalingRequest({ type: 'call-request', to: msg.peerId, fromName: msg.fromName }); return openCallWindow(msg.peerId, msg.peerName, true);
         case 'acceptCall':         await openCallWindow(msg.peerId, msg.peerName, false); return { ok: true };
         case 'declineCall':        await signalingRequest({ type: 'call-declined', to: msg.peerId }); return { ok: true };
