@@ -1433,19 +1433,33 @@ class CanvasMessenger {
         // Client-side search across cached thread names + stored message bodies
         const searchInput = searchWrap.querySelector('#cm-relay-msg-search');
         let searchDebounce;
+        // Every stored message of every thread (up to 1000 each) is read from
+        // storage to search. Load that once per typing session instead of on
+        // every debounced keystroke; drop it on refocus, when the box is
+        // cleared, or when a new relay message arrives so results stay fresh.
+        let searchData = null;
+        const loadSearchData = () => searchData ||= (async () => {
+            const keys = threads.map(t => `relayMsg_${t.id}`);
+            return keys.length ? new Promise(r => chrome.storage.local.get(keys, r)) : {};
+        })();
+        this._relaySearchAbort?.abort();
+        this._relaySearchAbort = new AbortController();
+        relayBus.addEventListener('cm-relay-msg', () => { searchData = null; }, { signal: this._relaySearchAbort.signal });
+        searchInput.addEventListener('focus', () => { searchData = null; });
         searchInput.addEventListener('input', () => {
             clearTimeout(searchDebounce);
             const q = searchInput.value.trim().toLowerCase();
             if (!q) {
+                searchData = null;
                 listWrap.style.display = '';
                 this.$convList.querySelector('#cm-relay-search-hits')?.remove();
                 return;
             }
-            searchDebounce = setTimeout(() => this.doRelaySearch(q, threads, profile, listWrap), 200);
+            searchDebounce = setTimeout(() => this.doRelaySearch(q, threads, profile, listWrap, loadSearchData), 200);
         });
     }
 
-    async doRelaySearch(q, threads, profile, listWrap) {
+    async doRelaySearch(q, threads, profile, listWrap, loadData) {
         listWrap.style.display = 'none';
         let resultsEl = this.$convList.querySelector('#cm-relay-search-hits');
         if (!resultsEl) {
@@ -1461,8 +1475,7 @@ class CanvasMessenger {
                 matches.push({ thread: t, snippet: t.lastMessage || '', sentAt: t.lastAt || '' });
             }
         }
-        const keys = threads.map(t => `relayMsg_${t.id}`);
-        const data = keys.length ? await new Promise(r => chrome.storage.local.get(keys, r)) : {};
+        const data = await loadData();
         for (const t of threads) {
             const msgs = data[`relayMsg_${t.id}`] || [];
             for (const m of msgs) {
