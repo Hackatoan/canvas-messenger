@@ -138,10 +138,15 @@ function send(msg) {
 
 async function acctRun(fn) {
     acctButtons.forEach(b => { b.disabled = true; });
-    acctStatus.className = 'status inline';
+    // Sign-in/Google/sync can take a few seconds; say something is happening.
+    const busy = 'Working…';
+    acctMsg(busy, 'info');
     try { return await fn(); }
     catch (e) { acctMsg(e.message, 'error'); }
-    finally { acctButtons.forEach(b => { b.disabled = false; }); }
+    finally {
+        acctButtons.forEach(b => { b.disabled = false; });
+        if (acctStatus.textContent === busy) acctStatus.className = 'status inline'; // e.g. confirm() cancelled
+    }
 }
 
 async function refreshAccount() {
