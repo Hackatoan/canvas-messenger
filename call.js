@@ -69,6 +69,18 @@ async function init() {
         btnCam.classList.add('off');
         btnCam.setAttribute('aria-pressed', 'true');
         camOn = false;
+        // Clicking does nothing without a track — say why instead of failing silently.
+        // aria-disabled (not disabled) keeps it focusable so the reason stays discoverable.
+        btnCam.setAttribute('aria-disabled', 'true');
+        btnCam.title = 'No camera available — check browser permissions';
+        localCamOff.textContent = 'No camera';
+    }
+    if (!localStream.getAudioTracks().length) {
+        btnMic.classList.add('off');
+        btnMic.setAttribute('aria-pressed', 'true');
+        micOn = false;
+        btnMic.setAttribute('aria-disabled', 'true');
+        btnMic.title = 'No microphone available — check browser permissions';
     }
 
     connectSignaling();
