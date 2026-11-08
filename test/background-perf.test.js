@@ -143,3 +143,23 @@ test('relaySendMessage stores the sent message + thread in one write', async () 
     assert.deepEqual(env.store.relayMsg_t9, [{ id: 'm9', threadId: 't9', senderId: 'me', body: 'yo', sentAt: '2026-11-08T11:00:00.000Z', fromMe: true, read: false }]);
     assert.deepEqual(env.store.relayThreads, [{ id: 't9', contactId: 'p1', contactName: 'Pat', lastMessage: 'yo', lastAt: '2026-11-08T11:00:00.000Z', unreadCount: 3 }]);
 });
+
+test('findOrCreateClassChat caches the topic id per host+course; fresh bypasses it', async () => {
+    const topics = [{ id: 11, title: 'Week 1' }, { id: 42, title: '📣 Class Chat', message: '<p>long body…</p>' }];
+    const env = load({ routes: [['/courses/9/discussion_topics?', () => ({ status: 200, body: topics })]] });
+    env.store.canvasUrl = 'https://school.instructure.com'; env.store.apiToken = 'T';
+    await new Promise(r => setImmediate(r));
+    const listCalls = () => env.calls.filter(c => c.url.includes('/discussion_topics?')).length;
+
+    assert.equal((await env.api.handleMessage({ action: 'findOrCreateClassChat', courseId: 9 })).id, 42);
+    assert.equal(listCalls(), 1);
+    assert.deepEqual(env.store.cmClassChatTopics, { 'https://school.instructure.com|9': 42 });
+
+    assert.deepEqual(await env.api.handleMessage({ action: 'findOrCreateClassChat', courseId: 9 }), { id: 42 });
+    assert.equal(listCalls(), 1, 'second open served from cache');
+
+    topics[1].id = 43; // topic was recreated
+    assert.equal((await env.api.handleMessage({ action: 'findOrCreateClassChat', courseId: 9, fresh: true })).id, 43);
+    assert.equal(listCalls(), 2);
+    assert.equal(env.store.cmClassChatTopics['https://school.instructure.com|9'], 43);
+});
