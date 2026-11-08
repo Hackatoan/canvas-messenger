@@ -16,7 +16,9 @@
     const isCanvas = detectCanvas();
     const stored   = await new Promise(r => chrome.storage.local.get(['canvasUrl', 'apiToken'], r));
 
-    if (isCanvas && !stored.canvasUrl) {
+    // Only offer to trust an HTTPS origin — the API token is a bearer credential.
+    const secureOrigin = (location.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname));
+    if (isCanvas && secureOrigin && !stored.canvasUrl) {
         // detectCanvas() only looks at page-controlled signals (window.ENV,
         // DOM markup), which any site can fake. Once canvasUrl is saved, every
         // future API call — including the user's Canvas access token — is
