@@ -67,6 +67,19 @@ function fullTime(iso) {
     return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Dim an optimistic message bubble whose send failed and put a visible,
+// announced "Not sent" note under it (outside the dimmed bubble so it stays
+// readable) instead of relying on a hover-only tooltip.
+function markSendFailed(bubble, reason) {
+    bubble.style.opacity = '0.4';
+    bubble.title = 'Failed to send: ' + reason;
+    const fail = document.createElement('div');
+    fail.className = 'cm-msg-failed';
+    fail.setAttribute('role', 'alert');
+    fail.textContent = `Not sent — ${reason}`;
+    bubble.after(fail);
+}
+
 // Let keyboard users open a click-only list row: focusable, Enter/Space click it.
 // Only the row itself reacts, so nested buttons keep their own behaviour.
 function makeActivatable(el, asButton = true) {
@@ -495,8 +508,7 @@ class CanvasMessenger {
             }
             this.loadConversations();
         } catch (e) {
-            bubble.style.opacity = '0.4';
-            bubble.title = 'Failed to send: ' + e.message;
+            markSendFailed(bubble, e.message);
         }
     }
 
@@ -721,8 +733,7 @@ class CanvasMessenger {
         try {
             await API.createDiscussionEntry(this.classChatCourse.id, this.classChatTopic.id, message);
         } catch (e) {
-            bubble.style.opacity = '0.4';
-            bubble.title = 'Failed: ' + e.message;
+            markSendFailed(bubble, e.message);
         }
     }
 
@@ -1626,15 +1637,7 @@ class CanvasMessenger {
                 await new Promise((resolve, reject) => chrome.runtime.sendMessage(
                     { action: 'relaySendMessage', recipientId: contact.id, body },
                     r => r?.ok ? resolve(r) : reject(new Error(r?.error || 'Send failed'))));
-            } catch (e) {
-                bubble.style.opacity = '0.4';
-                bubble.title = 'Failed: ' + e.message;
-                // Visible (and, via the log region, announced) instead of tooltip-only.
-                const fail = document.createElement('div');
-                fail.className = 'cm-msg-failed';
-                fail.textContent = `Not sent — ${e.message}`;
-                bubble.after(fail); // outside the dimmed bubble so it stays readable
-            }
+            } catch (e) { markSendFailed(bubble, e.message); }
         };
         textarea.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
         sendBtn.addEventListener('click', doSend);
