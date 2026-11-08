@@ -381,15 +381,16 @@
         li.className = 'ic-app-header__menu-list-item';
         li.innerHTML = `
             <a id="cm-nav-btn" href="javascript:void(0)" role="button" tabindex="0" aria-expanded="false"
+               aria-label="Canvas Messenger"
                class="ic-app-header__menu-list-link"
                style="display:flex;flex-direction:column;align-items:center;justify-content:center;
                       gap:3px;cursor:pointer;padding:14px 2px;color:inherit;text-decoration:none;">
                 <div style="position:relative;line-height:0">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
-                    <div id="cm-nav-badge" style="display:none;position:absolute;top:-4px;right:-6px;
+                    <div id="cm-nav-badge" aria-hidden="true" style="display:none;position:absolute;top:-4px;right:-6px;
                          background:#ed4245;color:#fff;font-size:9px;font-weight:700;
                          min-width:14px;height:14px;border-radius:7px;
                          align-items:center;justify-content:center;padding:0 3px;
@@ -623,10 +624,13 @@
             badge.setAttribute('aria-hidden', 'true');
         } else { badge?.remove(); }
         // The badge digits would otherwise become the button's whole accessible name.
-        fab.setAttribute('aria-label', count > 0 ? `Canvas Messenger, ${count} unread` : 'Canvas Messenger');
+        const launcherLabel = count > 0 ? `Canvas Messenger, ${count} unread` : 'Canvas Messenger';
+        fab.setAttribute('aria-label', launcherLabel);
 
         // Nav button badge
         const navBadge = document.getElementById('cm-nav-badge');
+        // Same as the FAB: the label carries the count, the digits stay aria-hidden.
+        document.getElementById('cm-nav-btn')?.setAttribute('aria-label', launcherLabel);
         if (navBadge) {
             if (count > 0) {
                 navBadge.textContent = count > 99 ? '99+' : String(count);
