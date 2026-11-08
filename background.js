@@ -67,6 +67,17 @@ function connectSignaling() {
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 
+// The Canvas API token is a full-account bearer credential — never send it
+// over plaintext HTTP. Real Canvas instances are always HTTPS; plain http is
+// only allowed for a local dev instance.
+function isSecureCanvasUrl(u) {
+    try {
+        const { protocol, hostname } = new URL(u);
+        return protocol === 'https:' ||
+            (protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(hostname));
+    } catch { return false; }
+}
+
 async function getSettings() {
     return new Promise(resolve => {
         chrome.storage.local.get(['canvasUrl', 'apiToken', 'currentUser'], resolve);
@@ -78,6 +89,7 @@ async function getSettings() {
 async function canvasFetch(path, opts = {}) {
     const { canvasUrl, apiToken } = await getSettings();
     if (!canvasUrl || !apiToken) throw new Error('NOT_CONFIGURED');
+    if (!isSecureCanvasUrl(canvasUrl)) throw new Error('INSECURE_CANVAS_URL');
 
     const url = `${canvasUrl.replace(/\/$/, '')}/api/v1${path}`;
     const controller = new AbortController();
@@ -228,6 +240,7 @@ async function getCurrentUser() {
 async function uploadCanvasFile(base64Data, filename = 'screenshot.png', contentType = 'image/png') {
     const { canvasUrl, apiToken } = await getSettings();
     if (!canvasUrl || !apiToken) throw new Error('NOT_CONFIGURED');
+    if (!isSecureCanvasUrl(canvasUrl)) throw new Error('INSECURE_CANVAS_URL');
 
     // Convert base64 data URL to blob bytes
     const base64 = base64Data.replace(/^data:[^;]+;base64,/, '');
@@ -905,6 +918,7 @@ async function accountLink() {
 // Apply what the relay returned for a sign-in on a (possibly brand-new) device.
 async function accountRestore(d) {
     if (!d.canvas?.token || !d.canvas?.url) throw new Error('Your account has no saved Canvas connection yet. Connect on your other device first.');
+    if (!isSecureCanvasUrl(d.canvas.url)) throw new Error('Your saved Canvas address isn\'t HTTPS — reconnect Canvas on this device instead.');
     if (!d.keypair?.publicKeyJwk || !d.keypair?.privateKeyJwk) throw new Error('Your account has no saved encryption keys. Open the extension on your original device once, then try again.');
 
     let currentUser = { id: d.canvas.userId, name: d.name };

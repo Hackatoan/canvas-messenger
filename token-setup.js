@@ -26,7 +26,9 @@ function redact(str) {
         document.querySelector('.ic-app-header, #ic-app-header-primary') ||
         document.querySelector('#application[data-account-id]')
     );
-    if (!isCanvas) return;
+    // Never set up (or save) a token for a plaintext-HTTP origin.
+    const secureOrigin = (location.protocol === 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname));
+    if (!isCanvas || !secureOrigin) return;
 
     await new Promise(r => {
         if (document.readyState === 'complete') return r();

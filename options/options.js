@@ -66,6 +66,13 @@ saveBtn.addEventListener('click', async () => {
         markInvalid(urlInput);
         return;
     }
+    // Never send the API token over plaintext HTTP (local dev instances excepted).
+    const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(parsedUrl.hostname);
+    if (parsedUrl.protocol !== 'https:' && !(parsedUrl.protocol === 'http:' && isLocal)) {
+        showStatus('Canvas URL must start with https://', 'error');
+        markInvalid(urlInput);
+        return;
+    }
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Connecting…';
