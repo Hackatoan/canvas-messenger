@@ -51,7 +51,7 @@ function load({ routes = [], tabs = [] } = {}) {
     const src = fs.readFileSync(path.join(__dirname, '..', 'background.js'), 'utf8');
     const inert = () => 0;
     const api = new Function('chrome', 'WebSocket', 'fetch', 'crypto', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        src + '\nreturn { handleMessage, updateBadge, broadcastToTabs, storeRelayMessage, relayEncrypt };')
+        src + '\nreturn { handleMessage, updateBadge, broadcastToTabs, storeRelayMessage, relayEncrypt, relayDecrypt };')
         (chrome, WS, fetchFake, globalThis.crypto, inert, inert, inert, inert);
     return { api, store, calls, storageOps, badge, tabQueries, tabMessages };
 }
@@ -162,4 +162,44 @@ test('findOrCreateClassChat caches the topic id per host+course; fresh bypasses 
     assert.equal((await env.api.handleMessage({ action: 'findOrCreateClassChat', courseId: 9, fresh: true })).id, 43);
     assert.equal(listCalls(), 2);
     assert.equal(env.store.cmClassChatTopics['https://school.instructure.com|9'], 43);
+});
+
+// The pre-cache implementation, verbatim, to prove wire compatibility both ways.
+async function legacyEncrypt(plaintext, privateJwk, peerPublicJwk) {
+    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
+    const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    const key  = await crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const iv   = crypto.getRandomValues(new Uint8Array(12));
+    const enc  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext));
+    const b64  = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+    return { encryptedBody: b64(enc), iv: b64(iv) };
+}
+async function legacyDecrypt(encB64, ivB64, privateJwk, peerPublicJwk) {
+    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
+    const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+    const key  = await crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const dec  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: Uint8Array.from(atob(ivB64), c => c.charCodeAt(0)) }, key,
+        Uint8Array.from(atob(encB64), c => c.charCodeAt(0)));
+    return new TextDecoder().decode(dec);
+}
+
+test('cached ECDH keys stay wire-compatible with the previous per-message derivation', async () => {
+    const env = load();
+    const alice = await keypair(), bob = await keypair(), carol = await keypair();
+    // old sender -> new receiver
+    const m1 = await legacyEncrypt('from old client', bob.priv, alice.pub);
+    assert.equal(await env.api.relayDecrypt(m1.encryptedBody, m1.iv, alice.priv, bob.pub), 'from old client');
+    // new sender -> old receiver (reusing the now-cached alice/bob key)
+    const m2 = await env.api.relayEncrypt('from new client', alice.priv, bob.pub);
+    assert.equal(await legacyDecrypt(m2.encryptedBody, m2.iv, bob.priv, alice.pub), 'from new client');
+    // different peers never share a cached key
+    const m3 = await env.api.relayEncrypt('for carol only', alice.priv, carol.pub);
+    assert.equal(await legacyDecrypt(m3.encryptedBody, m3.iv, carol.priv, alice.pub), 'for carol only');
+    await assert.rejects(legacyDecrypt(m3.encryptedBody, m3.iv, bob.priv, alice.pub));
+    await assert.rejects(env.api.relayDecrypt(m3.encryptedBody, m3.iv, alice.priv, bob.pub));
+    // repeated use of one pair returns correct plaintexts
+    for (let i = 0; i < 5; i++) {
+        const m = await legacyEncrypt(`n${i}`, bob.priv, alice.pub);
+        assert.equal(await env.api.relayDecrypt(m.encryptedBody, m.iv, alice.priv, bob.pub), `n${i}`);
+    }
 });
