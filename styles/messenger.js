@@ -1005,6 +1005,7 @@ class CanvasMessenger {
                         </div>`).join('');
                     results.style.display = 'block';
                     results.querySelectorAll('.cm-search-result').forEach(el => {
+                        makeActivatable(el);
                         el.addEventListener('click', () => {
                             const id = el.dataset.id;
                             const name = el.dataset.name;
@@ -1014,6 +1015,7 @@ class CanvasMessenger {
                             }
                             input.value = '';
                             results.style.display = 'none';
+                            input.focus(); // the focused result row was just hidden
                         });
                     });
                 } catch { results.style.display = 'none'; }
@@ -1472,6 +1474,7 @@ class CanvasMessenger {
         for (const m of top) {
             const el = document.createElement('div');
             el.className = 'cm-conv-item';
+            makeActivatable(el);
             el.innerHTML = `
                 <div class="cm-relay-av-slot"></div>
                 <div class="cm-conv-info">
