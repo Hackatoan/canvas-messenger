@@ -67,6 +67,18 @@ function fullTime(iso) {
     return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Let keyboard users open a click-only list row: focusable, Enter/Space click it.
+// Only the row itself reacts, so nested buttons keep their own behaviour.
+function makeActivatable(el, asButton = true) {
+    el.tabIndex = 0;
+    if (asButton) el.setAttribute('role', 'button');
+    el.addEventListener('keydown', e => {
+        if (e.target !== el || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        el.click();
+    });
+}
+
 // Make a click-to-copy text element keyboard-operable (Enter/Space) and
 // confirm the copy with a brief "Copied!" that screen readers also announce.
 function makeCopyable(el, text) {
@@ -299,6 +311,7 @@ class CanvasMessenger {
 
         const el = document.createElement('div');
         el.className = 'cm-conv-item' + (isUnread ? ' unread' : '') + (conv.id == this.activeConvId ? ' active' : '');
+        makeActivatable(el);
         el.innerHTML = `
             <div style="flex-shrink:0"></div>
             <div class="cm-conv-info">
@@ -532,6 +545,7 @@ class CanvasMessenger {
             for (const c of courses) {
                 const item = document.createElement('div');
                 item.className = 'cm-conv-item' + (c.id == this.activeConvId ? ' active' : '');
+                makeActivatable(item);
                 item.innerHTML = `
                     <div style="flex-shrink:0"></div>
                     <div class="cm-conv-info">
@@ -741,6 +755,7 @@ class CanvasMessenger {
             for (const g of groups) {
                 const item = document.createElement('div');
                 item.className = 'cm-conv-item' + (g.id == this.activeConvId ? ' active' : '');
+                makeActivatable(item);
                 item.innerHTML = `
                     <div style="flex-shrink:0"></div>
                     <div class="cm-conv-info">
@@ -1094,6 +1109,7 @@ class CanvasMessenger {
     mkContactItem(contact) {
         const el = document.createElement('div');
         el.className = 'cm-conv-item cm-contact-item';
+        makeActivatable(el, false); // contains its own Edit/Delete buttons, so no role=button
         el.innerHTML = `
             <div class="cm-contact-avatar-slot"></div>
             <div class="cm-conv-info">
@@ -1373,6 +1389,7 @@ class CanvasMessenger {
         for (const thread of sorted) {
             const el = document.createElement('div');
             el.className = 'cm-conv-item' + (thread.unreadCount ? ' unread' : '');
+            makeActivatable(el);
             el.innerHTML = `
                 <div class="cm-relay-av-slot"></div>
                 <div class="cm-conv-info">
