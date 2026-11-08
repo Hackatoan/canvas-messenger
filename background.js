@@ -374,19 +374,36 @@ async function markRelayThreadRead(threadId, readAt) {
     if (changed) await new Promise(r => chrome.storage.local.set({ [key]: stored }, r));
 }
 
+// ECDH import + deriveKey is by far the costly part of each message (~10x
+// the AES-GCM op itself), and the result only depends on the (our key, peer
+// key) pair — so derive once per pair and reuse. Keyed on public
+// coordinates only; the derived CryptoKey is non-extractable and in-memory.
+const relayKeyCache = new Map();
+async function relaySharedKey(privateJwk, peerPublicJwk) {
+    const id = `${privateJwk.x}|${privateJwk.y}|${peerPublicJwk.x}|${peerPublicJwk.y}`;
+    let p = relayKeyCache.get(id);
+    if (!p) {
+        p = (async () => {
+            const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
+            const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+            return crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+        })();
+        p.catch(() => relayKeyCache.delete(id)); // bad key material: don't cache the failure
+        if (relayKeyCache.size >= 256) relayKeyCache.clear();
+        relayKeyCache.set(id, p);
+    }
+    return p;
+}
+
 async function relayDecrypt(encB64, ivB64, privateJwk, peerPublicJwk) {
-    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
-    const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-    const key  = await crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const key  = await relaySharedKey(privateJwk, peerPublicJwk);
     const dec  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: Uint8Array.from(atob(ivB64), c => c.charCodeAt(0)) }, key,
         Uint8Array.from(atob(encB64), c => c.charCodeAt(0)));
     return new TextDecoder().decode(dec);
 }
 
 async function relayEncrypt(plaintext, privateJwk, peerPublicJwk) {
-    const priv = await crypto.subtle.importKey('jwk', privateJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
-    const pub  = await crypto.subtle.importKey('jwk', peerPublicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-    const key  = await crypto.subtle.deriveKey({ name: 'ECDH', public: pub }, priv, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+    const key  = await relaySharedKey(privateJwk, peerPublicJwk);
     const iv   = crypto.getRandomValues(new Uint8Array(12));
     const enc  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext));
     const b64  = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
