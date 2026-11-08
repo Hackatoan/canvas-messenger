@@ -115,6 +115,7 @@
 }
 .cm-conv-item:hover { background: #35373c; }
 .cm-conv-item.active { background: #404249; }
+.cm-conv-item:focus-visible { outline: 2px solid #5865f2; outline-offset: -2px; }
 .cm-conv-item.unread .cm-conv-subject { color: #fff; font-weight: 600; }
 .cm-conv-item.unread .cm-conv-preview { color: #dcddde; }
 
@@ -661,7 +662,8 @@
     opacity: 0;
     transition: opacity 0.1s;
 }
-.cm-contact-item:hover .cm-contact-actions { opacity: 1; }
+.cm-contact-item:hover .cm-contact-actions,
+.cm-contact-item:focus-within .cm-contact-actions { opacity: 1; }
 
 .cm-contact-notes { font-style: italic; }
 
