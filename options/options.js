@@ -12,6 +12,17 @@ function showStatus(msg, type) {
     statusEl.className = 'status ' + type;
 }
 
+// Flag empty/invalid inputs with the existing .error style + aria-invalid,
+// move focus to the first one, and clear the flag as soon as the user edits.
+function markInvalid(...inputs) {
+    inputs.forEach(i => { i.classList.add('error'); i.setAttribute('aria-invalid', 'true'); });
+    if (inputs[0]) inputs[0].focus();
+}
+[urlInput, tokenInput].forEach(i => i.addEventListener('input', () => {
+    i.classList.remove('error');
+    i.removeAttribute('aria-invalid');
+}));
+
 function initials(name = '?') {
     return name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
@@ -41,13 +52,18 @@ saveBtn.addEventListener('click', async () => {
     const url   = urlInput.value.trim();
     const token = tokenInput.value.trim();
 
-    if (!url || !token) { showStatus('Please fill in both fields.', 'error'); return; }
+    if (!url || !token) {
+        showStatus('Please fill in both fields.', 'error');
+        markInvalid(...[!url && urlInput, !token && tokenInput].filter(Boolean));
+        return;
+    }
 
     let parsedUrl;
     try {
         parsedUrl = new URL(url);
     } catch {
         showStatus('Invalid URL — make sure it starts with https://', 'error');
+        markInvalid(urlInput);
         return;
     }
 
@@ -75,7 +91,11 @@ saveBtn.addEventListener('click', async () => {
 testBtn.addEventListener('click', async () => {
     const url   = urlInput.value.trim();
     const token = tokenInput.value.trim();
-    if (!url || !token) { showStatus('Fill in both fields first.', 'error'); return; }
+    if (!url || !token) {
+        showStatus('Fill in both fields first.', 'error');
+        markInvalid(...[!url && urlInput, !token && tokenInput].filter(Boolean));
+        return;
+    }
 
     testBtn.disabled = true;
     testBtn.textContent = 'Testing…';
