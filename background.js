@@ -7,9 +7,20 @@ let sigReconnectDelay = 2000;
 const RECONNECT_MAX_DELAY = 30000;
 
 // Broadcast a message to every live Canvas content-script tab.
+// content.js only mounts (and listens) on the saved Canvas host, so once
+// that's known, skip messaging every other open tab — typing/read events
+// fire often and each sendMessage is an IPC hop to a tab with no listener.
 async function broadcastToTabs(action, payload) {
-    const tabs = await chrome.tabs.query({ url: ['https://*/*', 'http://*/*'] });
+    const [tabs, { canvasUrl }] = await Promise.all([
+        chrome.tabs.query({ url: ['https://*/*', 'http://*/*'] }),
+        new Promise(r => chrome.storage.local.get('canvasUrl', r)),
+    ]);
+    let host = null;
+    try { if (canvasUrl) host = new URL(canvasUrl).hostname; } catch {}
     for (const tab of tabs) {
+        if (host && tab.url) {
+            try { if (new URL(tab.url).hostname !== host) continue; } catch { continue; }
+        }
         chrome.tabs.sendMessage(tab.id, { action, payload }).catch(() => {});
     }
 }
