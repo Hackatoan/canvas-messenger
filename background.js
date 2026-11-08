@@ -48,6 +48,10 @@ function connectSignaling() {
         sigWs.onmessage = async (e) => {
             let msg;
             try { msg = JSON.parse(e.data); } catch { return; }
+            // cm-signaling forwards a caller's 'call-request' unchanged (with
+            // `from`/`fromName` stamped on); the in-page toast handles it as
+            // 'incoming-call'. Without this mapping incoming calls never rang.
+            if (msg.type === 'call-request') msg = { ...msg, type: 'incoming-call' };
             if (msg.type === 'incoming-call' || msg.type === 'call-failed') {
                 broadcastToTabs('cm-call-event', msg);
             }
