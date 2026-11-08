@@ -346,7 +346,7 @@ class CanvasMessenger {
                 <div class="cm-conv-subject">${escHtml(conv.subject || '(no subject)')}</div>
                 <div class="cm-conv-preview">${escHtml(conv.last_message || '')}</div>
             </div>
-            ${isUnread ? '<div class="cm-unread-dot"></div>' : ''}`;
+            ${isUnread ? '<div class="cm-unread-dot"><span class="cm-sr-only">Unread</span></div>' : ''}`;
 
         const avatarSlot = el.querySelector('div[style]');
         avatarSlot.replaceWith(mkAvatar(displayName));
@@ -1429,7 +1429,7 @@ class CanvasMessenger {
                     </div>
                     <div class="cm-conv-preview">${escHtml(thread.lastMessage || '')}</div>
                 </div>
-                ${thread.unreadCount ? '<div class="cm-unread-dot"></div>' : ''}`;
+                ${thread.unreadCount ? '<div class="cm-unread-dot"><span class="cm-sr-only">Unread</span></div>' : ''}`;
             const avatar = mkAvatar(thread.contactName);
             avatar.style.position = 'relative';
             el.querySelector('.cm-relay-av-slot').replaceWith(avatar);
@@ -1550,8 +1550,8 @@ class CanvasMessenger {
     renderRelayChat(thread, contact, messages, profile) {
         const receiptHtml = m => !m.fromMe ? '' :
             (m.read
-                ? '<span class="cm-relay-receipt read" title="Read">✓✓</span>'
-                : '<span class="cm-relay-receipt" title="Sent">✓</span>');
+                ? '<span class="cm-relay-receipt read" title="Read" role="img" aria-label="Read">✓✓</span>'
+                : '<span class="cm-relay-receipt" title="Sent" role="img" aria-label="Sent">✓</span>');
 
         const renderMsg = m => {
             const isMe = m.fromMe;
@@ -1639,7 +1639,7 @@ class CanvasMessenger {
                         <span class="cm-msg-author" style="color:#5865f2">${escHtml(myName)}</span>
                         <span class="cm-msg-timestamp">Just now</span>
                         <span class="cm-relay-lock" title="End-to-end encrypted">🔒</span>
-                        <span class="cm-relay-receipt" title="Sent">✓</span>
+                        <span class="cm-relay-receipt" title="Sent" role="img" aria-label="Sent">✓</span>
                     </div>
                     <div class="cm-msg-bubble">${escHtml(body)}</div>
                 </div>`;
@@ -1692,6 +1692,7 @@ class CanvasMessenger {
                 el.textContent = '✓✓';
                 el.classList.add('read');
                 el.title = 'Read';
+                el.setAttribute('aria-label', 'Read');
             });
         };
         relayBus.addEventListener('cm-relay-read', this._relayReadListener);
