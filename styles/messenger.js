@@ -174,15 +174,15 @@ class CanvasMessenger {
                             </svg>
                         </button>
                     </div>
-                    <div class="cm-tabs">
-                        <button class="cm-tab active" data-tab="all">DMs</button>
-                        <button class="cm-tab" data-tab="unread">Unread</button>
-                        <button class="cm-tab" data-tab="classes">Classes</button>
-                        <button class="cm-tab" data-tab="groups">Groups</button>
-                        <button class="cm-tab" data-tab="contacts">Contacts</button>
-                        <button class="cm-tab" data-tab="connect">Connect</button>
+                    <div class="cm-tabs" role="tablist" aria-label="Conversation lists">
+                        <button class="cm-tab active" data-tab="all" role="tab" aria-selected="true" aria-controls="cm-conv-list">DMs</button>
+                        <button class="cm-tab" data-tab="unread" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Unread</button>
+                        <button class="cm-tab" data-tab="classes" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Classes</button>
+                        <button class="cm-tab" data-tab="groups" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Groups</button>
+                        <button class="cm-tab" data-tab="contacts" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Contacts</button>
+                        <button class="cm-tab" data-tab="connect" role="tab" aria-selected="false" aria-controls="cm-conv-list" tabindex="-1">Connect</button>
                     </div>
-                    <div class="cm-conv-list" id="cm-conv-list">
+                    <div class="cm-conv-list" id="cm-conv-list" role="tabpanel">
                         <div class="cm-loading"><div class="cm-spinner"></div></div>
                     </div>
                 </div>
@@ -202,10 +202,28 @@ class CanvasMessenger {
 
         wrap.querySelector('#cm-settings-btn').addEventListener('click', () => chrome.runtime.sendMessage({ action: 'openSettings' }));
         wrap.querySelector('#cm-compose-btn').addEventListener('click', () => this.renderCompose());
-        wrap.querySelectorAll('.cm-tab').forEach(btn => {
+        const tabs = [...wrap.querySelectorAll('.cm-tab')];
+        // Tablist keyboard pattern: arrows/Home/End move between tabs and activate them.
+        wrap.querySelector('.cm-tabs').addEventListener('keydown', e => {
+            const i = tabs.indexOf(e.target);
+            if (i < 0) return;
+            const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+            if (next === undefined) return;
+            e.preventDefault();
+            const t = tabs[(next + tabs.length) % tabs.length];
+            t.focus();
+            t.click();
+        });
+        tabs.forEach(btn => {
             btn.addEventListener('click', () => {
-                wrap.querySelectorAll('.cm-tab').forEach(t => t.classList.remove('active'));
+                tabs.forEach(t => {
+                    t.classList.remove('active');
+                    t.setAttribute('aria-selected', 'false');
+                    t.tabIndex = -1;
+                });
                 btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
+                btn.tabIndex = 0;
                 this.tab = btn.dataset.tab;
                 if (this.tab === 'groups') {
                     this.stopClassChatPoll();
