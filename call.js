@@ -42,6 +42,8 @@ let callEnded = false;
 let callStartTime = null;
 let timerInterval = null;
 let micOn = true, camOn = true;
+let noAnswerTimer = null;
+const NO_ANSWER_TIMEOUT_MS = 45_000;
 
 // Set up peer name in UI
 callWithEl.textContent = peerName;
@@ -83,7 +85,33 @@ async function init() {
         btnMic.title = 'No microphone available — check browser permissions';
     }
 
+    if (isInitiator) {
+        // Without this the caller is stuck on "Calling…" forever if the peer
+        // never picks up (or their decline never reaches us).
+        noAnswerTimer = setTimeout(() => {
+            if (pc || callEnded) return;
+            statusEl.textContent = 'No answer';
+            hangup(true, 2000);
+        }, NO_ANSWER_TIMEOUT_MS);
+        watchForBusyDecline();
+    }
+
     connectSignaling();
+}
+
+// A busy callee's decline usually arrives before this window has registered,
+// so background.js receives it and records it as `callDeclined_<peer>`.
+function watchForBusyDecline() {
+    const key = `callDeclined_${peerId}`;
+    const onDeclined = () => {
+        if (pc || callEnded) return;
+        statusEl.textContent = `${peerName} declined the call`;
+        hangup(false, 2000);
+    };
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'session' && changes[key]?.newValue) onDeclined();
+    });
+    chrome.storage.session.get(key).then(d => { if (d[key]) onDeclined(); }).catch(() => {});
 }
 
 // ── Signaling ──────────────────────────────────────────────────────────────
@@ -110,6 +138,18 @@ function connectSignaling() {
             if (!isInitiator && !pc) wsSend({ type: 'call-accepted', to: peerId });
             return;
         }
+        if (msg?.type === 'register-failed') {
+            statusEl.textContent = `Couldn't connect the call: ${msg.reason || 'registration failed'}`;
+            hangup(false, 2500);
+            return;
+        }
+        // While this window is open it is our routable signaling socket, so a
+        // third party calling now lands here. Tell them we're busy instead of
+        // dropping it and leaving them ringing.
+        if (msg?.type === 'call-request' && msg.from != null && String(msg.from) !== String(peerId)) {
+            wsSend({ type: 'call-declined', to: String(msg.from) });
+            return;
+        }
         // This window is bound to one peer. The signaling server stamps `from`
         // with the sender's registered id, so drop anything from anyone else —
         // otherwise a third party could negotiate their own connection and
@@ -121,8 +161,8 @@ function connectSignaling() {
         if (msg.type === 'ice' && msg.candidate) {
             try { await pc?.addIceCandidate(msg.candidate); } catch {}
         }
-        if (msg.type === 'call-accepted' && isInitiator && !pc) await startCall();
-        if (msg.type === 'call-declined') { statusEl.textContent = `${peerName} declined the call`; hangup(false); }
+        if (msg.type === 'call-accepted' && isInitiator && !pc) { clearTimeout(noAnswerTimer); await startCall(); }
+        if (msg.type === 'call-declined') { statusEl.textContent = `${peerName} declined the call`; hangup(false, 2000); }
         if (msg.type === 'call-ended')  hangup(false);
     };
 
@@ -249,15 +289,16 @@ function startTimer() {
 
 // ── Hang up ────────────────────────────────────────────────────────────────
 
-function hangup(notify = true) {
+function hangup(notify = true, closeDelay = 400) {
     if (callEnded) return;
     callEnded = true;
+    clearTimeout(noAnswerTimer);
     if (notify) wsSend({ type: 'call-ended', to: peerId });
     clearInterval(timerInterval);
     localStream?.getTracks().forEach(t => t.stop());
     screenStream?.getTracks().forEach(t => t.stop());
     pc?.close();
-    setTimeout(() => window.close(), 400);
+    setTimeout(() => window.close(), closeDelay);
 }
 
 window.addEventListener('beforeunload', () => hangup(true));
