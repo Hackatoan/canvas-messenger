@@ -94,12 +94,22 @@ function connectSignaling() {
     ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'register', userId, name: userName, token: relayToken }));
         statusEl.textContent = isInitiator ? 'Calling…' : 'Connecting…';
-        if (isInitiator) setTimeout(startCall, 600);
+        // The caller no longer fires its offer on a timer: the callee's window
+        // only opens after they click Accept, so an offer sent 600ms after the
+        // caller's window opened always reached the callee's background socket
+        // and was dropped. The callee announces 'call-accepted' once registered
+        // and the caller starts the offer then.
     };
 
     ws.onmessage = async (e) => {
         let msg;
         try { msg = JSON.parse(e.data); } catch { return; }
+        // Server ack for our own register (no `from`). Messages sent before it
+        // are dropped server-side, so the callee only says it's ready now.
+        if (msg?.type === 'registered') {
+            if (!isInitiator && !pc) wsSend({ type: 'call-accepted', to: peerId });
+            return;
+        }
         // This window is bound to one peer. The signaling server stamps `from`
         // with the sender's registered id, so drop anything from anyone else —
         // otherwise a third party could negotiate their own connection and
@@ -111,6 +121,8 @@ function connectSignaling() {
         if (msg.type === 'ice' && msg.candidate) {
             try { await pc?.addIceCandidate(msg.candidate); } catch {}
         }
+        if (msg.type === 'call-accepted' && isInitiator && !pc) await startCall();
+        if (msg.type === 'call-declined') { statusEl.textContent = `${peerName} declined the call`; hangup(false); }
         if (msg.type === 'call-ended')  hangup(false);
     };
 
