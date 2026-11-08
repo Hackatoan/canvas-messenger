@@ -1597,12 +1597,19 @@ class CanvasMessenger {
             if (e.detail.threadId !== thread.id) return;
             // Reload and append new messages
             const newMsgs = await new Promise(r => chrome.runtime.sendMessage({ action: 'relayGetMessages', threadId: thread.id }, r)) || [];
+            // relayGetMessages returns the whole thread (up to 1000), so collect
+            // the rendered ids once instead of a DOM query per stored message,
+            // and scroll once after appending rather than forcing layout per item.
+            const shown = new Set([...msgEl.querySelectorAll('[data-relay-id]')].map(el => el.dataset.relayId));
+            let added = false;
             for (const m of newMsgs) {
-                if (!msgEl.querySelector(`[data-relay-id="${CSS.escape(String(m.id))}"]`) && !m.fromMe) {
+                if (!m.fromMe && !shown.has(String(m.id))) {
                     msgEl.insertAdjacentHTML('beforeend', renderMsg(m));
-                    msgEl.scrollTop = msgEl.scrollHeight;
+                    shown.add(String(m.id));
+                    added = true;
                 }
             }
+            if (added) msgEl.scrollTop = msgEl.scrollHeight;
             // The chat is open, so tell the server these were seen right away.
             chrome.runtime.sendMessage({ action: 'relayMarkRead', threadId: thread.id });
         };
