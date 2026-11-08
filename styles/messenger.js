@@ -980,6 +980,7 @@ class CanvasMessenger {
             btn.addEventListener('click', () => {
                 this.recipients = this.recipients.filter(r => r.id !== btn.dataset.id);
                 btn.closest('.cm-recipient-tag').remove();
+                box.querySelector('#cm-recipient-input')?.focus(); // removed tag had focus
             });
         });
 
@@ -1009,6 +1010,7 @@ class CanvasMessenger {
                 tag.querySelector('button').addEventListener('click', () => {
                     this.recipients = this.recipients.filter(x => x.id !== r.id);
                     renderRecipients();
+                    input.focus(); // removed tag had focus
                 });
                 box.insertBefore(tag, input);
             }
@@ -1023,7 +1025,11 @@ class CanvasMessenger {
                     const ctx = getContext(); // optional course narrowing
                     const data = await API.searchRecipients(q, ctx);
                     const users = Array.isArray(data) ? data : (data.users || []);
-                    if (!users.length) { results.style.display = 'none'; return; }
+                    if (!users.length) {
+                        results.innerHTML = `<div class="cm-empty" role="status">No one found for “${escHtml(q)}”</div>`;
+                        results.style.display = 'block';
+                        return;
+                    }
                     results.innerHTML = users.slice(0, 10).map(u => `
                         <div class="cm-search-result" data-id="${escHtml(u.id)}" data-name="${escHtml(u.name || u.full_name)}">
                             <div class="cm-avatar" aria-hidden="true" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${escHtml(initials(u.name || u.full_name))}</div>
@@ -1072,6 +1078,14 @@ class CanvasMessenger {
         }
 
         box.addEventListener('click', () => input.focus());
+        // Escape dismisses the suggestions from the input or a focused suggestion.
+        [input, results].forEach(el => el.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || results.style.display === 'none') return;
+            e.preventDefault();
+            e.stopPropagation(); // keep the sidebar open
+            results.style.display = 'none';
+            input.focus();
+        }));
     }
 
     async doSendNew() {
