@@ -148,6 +148,7 @@ function stripHtml(html) {
 function mkAvatar(name, size = 36) {
     const el = document.createElement('div');
     el.className = 'cm-avatar';
+    el.setAttribute('aria-hidden', 'true'); // initials duplicate the name shown next to it
     el.style.width = size + 'px';
     el.style.height = size + 'px';
     el.style.fontSize = Math.floor(size * 0.36) + 'px';
@@ -402,7 +403,7 @@ class CanvasMessenger {
             return `
                 <div class="cm-msg-group">
                     <div class="cm-msg-group-avatar">
-                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(author.name)}">${escHtml(initials(author.name))}</div>
+                        <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(author.name)}">${escHtml(initials(author.name))}</div>
                     </div>
                     <div class="cm-msg-group-body">
                         <div class="cm-msg-group-header">
@@ -495,7 +496,7 @@ class CanvasMessenger {
         bubble.className = 'cm-msg-group';
         bubble.innerHTML = `
             <div class="cm-msg-group-avatar">
-                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
+                <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
             </div>
             <div class="cm-msg-group-body">
                 <div class="cm-msg-group-header">
@@ -646,7 +647,7 @@ class CanvasMessenger {
             return `
                 <div class="cm-msg-group">
                     <div class="cm-msg-group-avatar">
-                        <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
+                        <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
                     </div>
                     <div class="cm-msg-group-body">
                         <div class="cm-msg-group-header">
@@ -729,7 +730,7 @@ class CanvasMessenger {
         bubble.className = 'cm-msg-group';
         bubble.innerHTML = `
             <div class="cm-msg-group-avatar">
-                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
+                <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
             </div>
             <div class="cm-msg-group-body">
                 <div class="cm-msg-group-header">
@@ -829,7 +830,7 @@ class CanvasMessenger {
                     ${members.map(m => `
                         <div class="cm-msg-group" style="margin-top:8px">
                             <div class="cm-msg-group-avatar">
-                                <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(m.name)}">${escHtml(initials(m.name))}</div>
+                                <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(m.name)}">${escHtml(initials(m.name))}</div>
                             </div>
                             <div class="cm-msg-group-body" style="display:flex;align-items:center;justify-content:space-between">
                                 <div>
@@ -1025,7 +1026,7 @@ class CanvasMessenger {
                     if (!users.length) { results.style.display = 'none'; return; }
                     results.innerHTML = users.slice(0, 10).map(u => `
                         <div class="cm-search-result" data-id="${escHtml(u.id)}" data-name="${escHtml(u.name || u.full_name)}">
-                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${escHtml(initials(u.name || u.full_name))}</div>
+                            <div class="cm-avatar" aria-hidden="true" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name || u.full_name)}">${escHtml(initials(u.name || u.full_name))}</div>
                             <div>
                                 <div class="cm-search-result-name">${escHtml(u.name || u.full_name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.common_courses ? 'Student/Instructor' : '')}</div>
@@ -1558,7 +1559,7 @@ class CanvasMessenger {
             const name = isMe ? (profile.name || 'Me') : contact.name;
             return `<div class="cm-msg-group" data-relay-id="${escHtml(m.id)}">
                 <div class="cm-msg-group-avatar">
-                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
+                    <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(name)}">${escHtml(initials(name))}</div>
                 </div>
                 <div class="cm-msg-group-body">
                     <div class="cm-msg-group-header">
@@ -1632,7 +1633,7 @@ class CanvasMessenger {
             bubble.className = 'cm-msg-group';
             bubble.innerHTML = `
                 <div class="cm-msg-group-avatar">
-                    <div class="cm-avatar" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
+                    <div class="cm-avatar" aria-hidden="true" style="width:36px;height:36px;font-size:13px;background:${avatarColor(myName)}">${escHtml(initials(myName))}</div>
                 </div>
                 <div class="cm-msg-group-body">
                     <div class="cm-msg-group-header">
@@ -1800,7 +1801,7 @@ class CanvasMessenger {
                     users.forEach(u => { searchResultsData[u.id] = u; });
                     searchResults.innerHTML = users.map(u => `
                         <div class="cm-search-result cm-relay-result" data-uid="${escHtml(u.id)}">
-                            <div class="cm-avatar" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${escHtml(initials(u.name))}</div>
+                            <div class="cm-avatar" aria-hidden="true" style="width:28px;height:28px;font-size:11px;background:${avatarColor(u.name)}">${escHtml(initials(u.name))}</div>
                             <div style="flex:1;min-width:0">
                                 <div class="cm-search-result-name">${escHtml(u.name)}</div>
                                 <div class="cm-search-result-type">${escHtml(u.email || '')}</div>
