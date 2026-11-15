@@ -122,6 +122,16 @@ function makeCopyable(el, text) {
     });
 }
 
+// True when a Canvas conversation matches a filter query (case-insensitive
+// substring of any participant name, the subject, or the last message).
+function convMatches(conv, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return true;
+    const names = (conv.participants || []).map(p => p && p.name).filter(Boolean);
+    return [...names, conv.subject, conv.last_message]
+        .some(v => typeof v === 'string' && v.toLowerCase().includes(q));
+}
+
 function escHtml(str) {
     return String(str || '')
         .replace(/&/g, '&amp;')
@@ -170,6 +180,7 @@ class CanvasMessenger {
         this.recipients = [];       // for compose
         this.courses = [];
         this.searchDebounce = null;
+        this.convFilter = '';       // DMs/Unread list filter text, kept across tab switches
 
         this.pendingSnippet = null;
         this._recipientClickHandler = null; // shared document-level listener, see setupRecipientInput()
@@ -320,10 +331,48 @@ class CanvasMessenger {
             return;
         }
         this.$convList.innerHTML = '';
-        for (const conv of this.conversations) {
-            const item = this.mkConvItem(conv);
-            this.$convList.appendChild(item);
-        }
+
+        // Quick client-side filter over the conversations already loaded.
+        const filterWrap = document.createElement('div');
+        filterWrap.className = 'cm-relay-search-wrap';
+        filterWrap.innerHTML = '<input type="text" id="cm-conv-filter" placeholder="Filter conversations…" aria-label="Filter conversations by name, subject, or message" autocomplete="off" />';
+        const input = filterWrap.querySelector('input');
+        input.value = this.convFilter || '';
+        this.$convList.appendChild(filterWrap);
+
+        const rows = this.conversations.map(conv => {
+            const el = this.mkConvItem(conv);
+            this.$convList.appendChild(el);
+            return [conv, el];
+        });
+
+        const noMatch = document.createElement('div');
+        noMatch.className = 'cm-empty';
+        noMatch.setAttribute('role', 'status');
+        this.$convList.appendChild(noMatch);
+
+        const applyFilter = () => {
+            this.convFilter = input.value;
+            const q = input.value.trim();
+            let shown = 0;
+            for (const [conv, el] of rows) {
+                const ok = convMatches(conv, q);
+                el.style.display = ok ? '' : 'none';
+                if (ok) shown++;
+            }
+            noMatch.style.display = shown ? 'none' : '';
+            noMatch.textContent = shown ? '' : `No conversations match “${q}”`;
+        };
+        input.addEventListener('input', applyFilter);
+        // Escape clears a non-empty filter instead of closing the sidebar.
+        input.addEventListener('keydown', e => {
+            if (e.key !== 'Escape' || !input.value) return;
+            e.preventDefault();
+            e.stopPropagation();
+            input.value = '';
+            applyFilter();
+        });
+        applyFilter();
     }
 
     mkConvItem(conv) {
