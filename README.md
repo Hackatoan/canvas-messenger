@@ -15,6 +15,7 @@ A browser extension that layers real-time messaging onto Canvas LMS: direct mess
 - Direct messages, group chats, and class-wide channels
 - Real-time delivery over WebRTC
 - Works on top of the existing Canvas UI
+- Filter box above the DMs/Unread list to find a conversation by name, subject, or last message (Escape clears)
 
 - Optional account (email + password via Firebase Auth) to restore your Canvas connection and encryption keys on a new device
 
