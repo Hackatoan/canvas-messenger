@@ -75,6 +75,7 @@ async function init() {
         // aria-disabled (not disabled) keeps it focusable so the reason stays discoverable.
         btnCam.setAttribute('aria-disabled', 'true');
         btnCam.title = 'No camera available — check browser permissions';
+        btnCam.setAttribute('aria-label', 'No camera available — check browser permissions');
         localCamOff.textContent = 'No camera';
     }
     if (!localStream.getAudioTracks().length) {
@@ -83,6 +84,7 @@ async function init() {
         micOn = false;
         btnMic.setAttribute('aria-disabled', 'true');
         btnMic.title = 'No microphone available — check browser permissions';
+        btnMic.setAttribute('aria-label', 'No microphone available — check browser permissions');
     }
 
     if (isInitiator) {
@@ -231,6 +233,7 @@ btnMic.addEventListener('click', () => {
     btnMic.classList.toggle('off', !micOn);
     btnMic.setAttribute('aria-pressed', String(!micOn));
     btnMic.title = micOn ? 'Mute' : 'Unmute';
+    btnMic.setAttribute('aria-label', micOn ? 'Mute microphone' : 'Unmute microphone');
 });
 
 btnCam.addEventListener('click', () => {
@@ -242,6 +245,7 @@ btnCam.addEventListener('click', () => {
     btnCam.setAttribute('aria-pressed', String(!camOn));
     localCamOff.style.display = camOn ? 'none' : 'flex';
     btnCam.title = camOn ? 'Camera off' : 'Camera on';
+    btnCam.setAttribute('aria-label', camOn ? 'Turn off camera' : 'Turn on camera');
 });
 
 btnScreen.addEventListener('click', toggleScreenShare);
@@ -261,6 +265,7 @@ async function toggleScreenShare() {
         btnScreen.classList.remove('screen-active');
         btnScreen.setAttribute('aria-pressed', 'false');
         btnScreen.title = 'Share screen';
+        btnScreen.setAttribute('aria-label', 'Share screen');
     } else {
         try {
             screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
@@ -271,6 +276,7 @@ async function toggleScreenShare() {
             btnScreen.classList.add('screen-active');
             btnScreen.setAttribute('aria-pressed', 'true');
             btnScreen.title = 'Stop sharing';
+            btnScreen.setAttribute('aria-label', 'Stop sharing screen');
             videoTrack.addEventListener('ended', () => toggleScreenShare());
         } catch {}
     }
